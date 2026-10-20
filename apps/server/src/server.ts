@@ -1,0 +1,191 @@
+import { createServer, type IncomingMessage } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import type { Duplex } from 'node:stream'
+import { WebSocketServer, type WebSocket } from 'ws'
+import { silentLogger, type Logger } from './logger.ts'
+import type { Persistence } from './persistence.ts'
+import { Room } from './room.ts'
+import { createStaticHandler } from './static.ts'
+
+/** Room ids appear in URLs and file names, so they are restricted to a safe alphabet. */
+export const ROOM_PATTERN = /^\/ws\/([A-Za-z0-9_-]{1,64})$/
+
+export interface ServerOptions {
+  readonly port: number
+  readonly host?: string
+  readonly persistence: Persistence
+  readonly logger?: Logger
+  /** Directory with the built web app; omit to serve only the sync endpoint. */
+  readonly staticDir?: string | null
+  readonly saveDebounceMs?: number
+  readonly saveMaxWaitMs?: number
+  /** How long an empty room stays in memory, so quick reconnects skip a reload. */
+  readonly unloadDelayMs?: number
+  readonly heartbeatMs?: number
+  /** Largest accepted WebSocket message in bytes. */
+  readonly maxPayload?: number
+}
+
+export interface RunningServer {
+  readonly port: number
+  readonly roomCount: number
+  readonly connectionCount: number
+  /** Closes every socket, writes all snapshots and stops listening. */
+  close(): Promise<void>
+}
+
+type AliveSocket = WebSocket & { isAlive?: boolean }
+
+export async function startServer(options: ServerOptions): Promise<RunningServer> {
+  const logger = options.logger ?? silentLogger
+  const rooms = new Map<string, Promise<Room>>()
+  const unloadTimers = new Map<string, NodeJS.Timeout>()
+  const serveStatic = options.staticDir ? createStaticHandler(options.staticDir) : null
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: options.maxPayload ?? 2 * 1024 * 1024,
+  })
+
+  const unloadDelay = options.unloadDelayMs ?? 30_000
+
+  const scheduleUnload = (room: Room) => {
+    if (room.connectionCount > 0) return
+    clearTimeout(unloadTimers.get(room.name))
+    unloadTimers.set(
+      room.name,
+      setTimeout(() => {
+        unloadTimers.delete(room.name)
+        void (async () => {
+          if (room.connectionCount > 0) return
+          await room.flush()
+          // Someone may have joined while the snapshot was being written.
+          if (room.connectionCount > 0) return
+          rooms.delete(room.name)
+          room.destroy()
+          logger.info('room unloaded', { room: room.name })
+        })()
+      }, unloadDelay),
+    )
+  }
+
+  const getRoom = (name: string): Promise<Room> => {
+    clearTimeout(unloadTimers.get(name))
+    unloadTimers.delete(name)
+    let room = rooms.get(name)
+    if (!room) {
+      room = Room.load({
+        name,
+        persistence: options.persistence,
+        logger,
+        saveDebounceMs: options.saveDebounceMs ?? 1000,
+        saveMaxWaitMs: options.saveMaxWaitMs ?? 10_000,
+        onDisconnect: scheduleUnload,
+      })
+      rooms.set(name, room)
+      room.then(
+        () => logger.info('room loaded', { room: name }),
+        () => rooms.delete(name),
+      )
+    }
+    return room
+  }
+
+  const http = createServer((req, res) => {
+    void (async () => {
+      if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        res.end(JSON.stringify({ status: 'ok', rooms: rooms.size, connections: wss.clients.size }))
+        return
+      }
+      if (serveStatic && (await serveStatic(req, res))) return
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end('Not found')
+    })().catch((error: unknown) => {
+      logger.error('request failed', { url: req.url, error: String(error) })
+      if (!res.headersSent) res.writeHead(500)
+      res.end()
+    })
+  })
+
+  http.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    const pathname = new URL(req.url ?? '/', 'http://local').pathname
+    const match = ROOM_PATTERN.exec(pathname)
+    if (!match) {
+      socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
+      return
+    }
+    const name = match[1]!
+    wss.handleUpgrade(req, socket, head, (ws: AliveSocket) => {
+      ws.isAlive = true
+      ws.on('pong', () => (ws.isAlive = true))
+      wss.emit('connection', ws, req)
+
+      // Messages can arrive before the room has loaded from disk; keep them.
+      const buffered: Uint8Array[] = []
+      const buffer = (data: Buffer) => buffered.push(new Uint8Array(data))
+      ws.on('message', buffer)
+      getRoom(name).then(
+        (room) => {
+          ws.off('message', buffer)
+          if (ws.readyState !== ws.OPEN) return scheduleUnload(room)
+          room.connect(ws, buffered)
+        },
+        (error: unknown) => {
+          logger.error('room load failed', { room: name, error: String(error) })
+          ws.close(1011, 'room unavailable')
+        },
+      )
+    })
+  })
+
+  // Drops connections that vanished without a close frame (sleeping laptops, dead NATs).
+  const heartbeat = setInterval(() => {
+    for (const client of wss.clients as Set<AliveSocket>) {
+      if (client.isAlive === false) {
+        client.terminate()
+        continue
+      }
+      client.isAlive = false
+      client.ping()
+    }
+  }, options.heartbeatMs ?? 30_000)
+
+  await new Promise<void>((resolve, reject) => {
+    http.once('error', reject)
+    http.listen(options.port, options.host ?? '0.0.0.0', () => {
+      http.off('error', reject)
+      resolve()
+    })
+  })
+  const port = (http.address() as AddressInfo).port
+  logger.info('listening', { port, staticDir: options.staticDir ?? null })
+
+  return {
+    port,
+    get roomCount() {
+      return rooms.size
+    },
+    get connectionCount() {
+      return wss.clients.size
+    },
+    async close() {
+      clearInterval(heartbeat)
+      for (const timer of unloadTimers.values()) clearTimeout(timer)
+      unloadTimers.clear()
+      const loaded = await Promise.allSettled(rooms.values())
+      for (const result of loaded) {
+        if (result.status === 'fulfilled') result.value.closeAll(1001, 'server shutting down')
+      }
+      for (const client of wss.clients) client.terminate()
+      await new Promise<void>((resolve) => wss.close(() => resolve()))
+      await new Promise<void>((resolve) => http.close(() => resolve()))
+      for (const result of loaded) {
+        if (result.status !== 'fulfilled') continue
+        await result.value.flush()
+        result.value.destroy()
+      }
+      rooms.clear()
+      logger.info('stopped')
+    },
+  }
+}
