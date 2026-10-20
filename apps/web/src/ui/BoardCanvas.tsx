@@ -2,6 +2,7 @@ import { FONT_SIZE, LINE_HEIGHT, type Editor, type PointerInput, type Vec } from
 import { useEffect, useRef } from 'react'
 import type { Theme } from '../canvas/palette.ts'
 import { Renderer } from '../canvas/renderer.ts'
+import { imageFiles, insertImages } from '../collab/assets.ts'
 import { measureTextBlock } from '../canvas/text-layout.ts'
 import { useEditor } from '../app/hooks.ts'
 import { TextEditor } from './TextEditor.tsx'
@@ -15,6 +16,7 @@ interface BoardCanvasProps {
   readonly reducedMotion: boolean
   readonly onRenderer?: (renderer: Renderer | null) => void
   readonly onShortcuts: () => void
+  readonly onNotice: (message: string) => void
 }
 
 export function BoardCanvas({
@@ -23,20 +25,23 @@ export function BoardCanvas({
   reducedMotion,
   onRenderer,
   onShortcuts,
+  onNotice,
 }: BoardCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<Renderer | null>(null)
   const reducedMotionRef = useRef(reducedMotion)
   const themeRef = useRef(theme)
+  const onNoticeRef = useRef(onNotice)
   const lastPointer = useRef<Vec | null>(null)
   const cursor = useEditor(editor, (e) => e.cursor)
 
   useEffect(() => {
     reducedMotionRef.current = reducedMotion
     themeRef.current = theme
+    onNoticeRef.current = onNotice
     rendererRef.current?.setTheme(theme)
-  }, [reducedMotion, theme])
+  }, [reducedMotion, theme, onNotice])
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -117,6 +122,18 @@ export function BoardCanvas({
         mod: e.ctrlKey || e.metaKey,
       })
     }
+    const onDragOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) e.preventDefault()
+    }
+    const onDrop = (e: DragEvent) => {
+      const images = imageFiles(e.dataTransfer?.files)
+      if (images.length === 0) return
+      e.preventDefault()
+      const rect = canvas.getBoundingClientRect()
+      insertImages(editor, images, { x: e.clientX - rect.left, y: e.clientY - rect.top }).catch(
+        (error: unknown) => onNoticeRef.current(String((error as Error).message)),
+      )
+    }
     const onContextMenu = (e: Event) => e.preventDefault()
 
     canvas.addEventListener('pointerdown', onPointerDown)
@@ -127,6 +144,8 @@ export function BoardCanvas({
     canvas.addEventListener('dblclick', onDoubleClick)
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('contextmenu', onContextMenu)
+    canvas.addEventListener('dragover', onDragOver)
+    canvas.addEventListener('drop', onDrop)
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
@@ -136,6 +155,8 @@ export function BoardCanvas({
       canvas.removeEventListener('dblclick', onDoubleClick)
       canvas.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('contextmenu', onContextMenu)
+      canvas.removeEventListener('dragover', onDragOver)
+      canvas.removeEventListener('drop', onDrop)
     }
   }, [editor])
 
@@ -182,8 +203,22 @@ export function BoardCanvas({
         e.preventDefault()
       }
     }
+    const addImages = (files: File[], at?: Vec) =>
+      insertImages(editor, files, at).catch((error: unknown) =>
+        onNoticeRef.current(
+          navigator.onLine
+            ? String((error as Error).message)
+            : 'Images need a connection to upload.',
+        ),
+      )
     const onPaste = (e: ClipboardEvent) => {
       if (isEditable(e.target)) return
+      const images = imageFiles(e.clipboardData?.files)
+      if (images.length > 0) {
+        e.preventDefault()
+        void addImages(images, lastPointer.current ?? undefined)
+        return
+      }
       const text = e.clipboardData?.getData('text/plain') ?? ''
       if (!text) return
       e.preventDefault()

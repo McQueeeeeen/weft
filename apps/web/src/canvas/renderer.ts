@@ -10,6 +10,7 @@ import {
   worldToScreen,
 } from '@weft/core'
 import { drawShape } from './draw-shapes.ts'
+import { onImageLoad } from './images.ts'
 import { BOARD_FONT, thread, withAlpha, type Theme } from './palette.ts'
 
 const GRID_STEP = 32
@@ -60,6 +61,7 @@ export class Renderer {
     this.ctx = canvas.getContext('2d', { alpha: false })!
     this.unsubscribe.push(editor.subscribe(this.invalidate))
     if (editor.presence) this.unsubscribe.push(editor.presence.subscribe(this.invalidate))
+    this.unsubscribe.push(onImageLoad(this.invalidate))
   }
 
   setTheme(theme: Theme): void {
@@ -105,7 +107,8 @@ export class Renderer {
     ctx.lineJoin = 'round'
     const shapes = editor.visibleShapes()
     const dc = { ctx, theme, lookup: editor.board.lookup, zoom: cam.z, editingId: editor.editingId }
-    for (const shape of shapes) drawShape(dc, shape)
+    for (const shape of shapes) if (shape.type === 'frame') drawShape(dc, shape)
+    for (const shape of shapes) if (shape.type !== 'frame') drawShape(dc, shape)
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const peers = editor.presence?.peers() ?? []

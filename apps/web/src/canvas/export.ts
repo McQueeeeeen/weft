@@ -9,6 +9,7 @@ import {
   type Shape,
 } from '@weft/core'
 import { drawShape } from './draw-shapes.ts'
+import { preloadImages } from './images.ts'
 import { BOARD_FONT, type Theme } from './palette.ts'
 import { wrapText } from './text-layout.ts'
 
@@ -28,6 +29,7 @@ export function boardToSvg(editor: Editor, theme: Theme): Blob | null {
     fontFamily: BOARD_FONT,
     wrapText,
     padding: PADDING,
+    imageHref: (src) => new URL(src, location.origin).href,
   })
   return svg ? new Blob([svg], { type: 'image/svg+xml' }) : null
 }
@@ -49,8 +51,10 @@ export async function boardToPng(editor: Editor, theme: Theme, scale = 2): Promi
   ctx.setTransform(k, 0, 0, k, -frame.minX * k, -frame.minY * k)
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
+  await preloadImages(shapes.flatMap((s) => (s.type === 'image' ? [s.src] : [])))
   const dc = { ctx, theme, lookup, zoom: k, editingId: null }
-  for (const shape of shapes) drawShape(dc, shape)
+  for (const shape of shapes) if (shape.type === 'frame') drawShape(dc, shape)
+  for (const shape of shapes) if (shape.type !== 'frame') drawShape(dc, shape)
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
 }

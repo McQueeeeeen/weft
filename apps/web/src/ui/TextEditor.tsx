@@ -1,4 +1,12 @@
-import { FONT_SIZE, LINE_HEIGHT, STICKY_FONT_SIZE, STICKY_PADDING, type Editor } from '@weft/core'
+import {
+  FONT_SIZE,
+  FRAME_TITLE_SIZE,
+  LINE_HEIGHT,
+  STICKY_FONT_SIZE,
+  STICKY_PADDING,
+  frameTitleBox,
+  type Editor,
+} from '@weft/core'
 import { useEffect, useRef } from 'react'
 import type { Theme } from '../canvas/palette.ts'
 import { BOARD_FONT } from '../canvas/palette.ts'
@@ -10,18 +18,20 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
   const view = useEditor(editor, (e) => {
     const id = e.editingId
     const shape = id ? e.board.get(id) : undefined
-    if (!shape || (shape.type !== 'sticky' && shape.type !== 'text')) return null
+    if (!shape || (shape.type !== 'sticky' && shape.type !== 'text' && shape.type !== 'frame'))
+      return null
     const cam = e.camera
+    const box = shape.type === 'frame' ? frameTitleBox(shape) : null
     return {
       id: shape.id,
       type: shape.type,
-      text: shape.text,
+      text: shape.type === 'frame' ? shape.title : shape.text,
       color: shape.color,
       size: shape.type === 'text' ? shape.size : null,
       left: (shape.x - cam.x) * cam.z,
-      top: (shape.y - cam.y) * cam.z,
+      top: ((box?.minY ?? shape.y) - cam.y) * cam.z,
       width: shape.w * cam.z,
-      height: shape.h * cam.z,
+      height: (box ? box.maxY - box.minY : shape.h) * cam.z,
       zoom: cam.z,
     }
   })
@@ -37,22 +47,25 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
   if (!view) return null
 
   const isSticky = view.type === 'sticky'
-  const fontSize = (isSticky ? STICKY_FONT_SIZE : FONT_SIZE[view.size ?? 'm']) * view.zoom
+  const isFrame = view.type === 'frame'
+  const fontSize =
+    (isSticky ? STICKY_FONT_SIZE : isFrame ? FRAME_TITLE_SIZE : FONT_SIZE[view.size ?? 'm']) *
+    view.zoom
   const padding = isSticky ? STICKY_PADDING * view.zoom : 0
   const colors = theme.content[view.color]
 
   return (
     <textarea
       ref={ref}
-      className={`text-editor ${isSticky ? 'is-sticky' : 'is-text'}`}
-      aria-label={isSticky ? 'Sticky note text' : 'Text'}
+      className={`text-editor ${isSticky ? 'is-sticky' : isFrame ? 'is-frame' : 'is-text'}`}
+      aria-label={isSticky ? 'Sticky note text' : isFrame ? 'Frame title' : 'Text'}
       value={view.text}
       wrap={isSticky ? 'soft' : 'off'}
       spellCheck
       style={{
         left: view.left,
         top: view.top,
-        width: isSticky ? view.width : Math.max(view.width, fontSize) + fontSize,
+        width: isSticky || isFrame ? view.width : Math.max(view.width, fontSize) + fontSize,
         height: view.height,
         padding,
         fontFamily: BOARD_FONT,
@@ -62,7 +75,9 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
       }}
       onChange={(e) => {
         const text = e.target.value
-        if (view.type === 'text') {
+        if (isFrame) {
+          editor.updateText(view.id, text.replace(/\n/g, ' '))
+        } else if (view.type === 'text') {
           const size = FONT_SIZE[view.size ?? 'm']
           editor.updateText(view.id, text, measureTextBlock(text, size, LINE_HEIGHT))
         } else {
@@ -70,7 +85,8 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
         }
       }}
       onKeyDown={(e) => {
-        const finish = e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))
+        const finish =
+          e.key === 'Escape' || (e.key === 'Enter' && (isFrame || e.metaKey || e.ctrlKey))
         if (finish) {
           e.preventDefault()
           editor.stopEditing()

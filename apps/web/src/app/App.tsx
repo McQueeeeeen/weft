@@ -15,6 +15,9 @@ import { ShortcutsDialog } from '../ui/ShortcutsDialog.tsx'
 import { StylePanel } from '../ui/StylePanel.tsx'
 import { Toolbar } from '../ui/Toolbar.tsx'
 import { TopBar } from '../ui/TopBar.tsx'
+import { FollowBanner } from '../ui/FollowBanner.tsx'
+import { VersionsDialog } from '../ui/VersionsDialog.tsx'
+import { useFollow } from './follow.ts'
 import { useEditor } from './hooks.ts'
 import { usePrefersReducedMotion, useTheme } from './theme.ts'
 
@@ -34,7 +37,9 @@ export function App({ session }: { session: Session }) {
     hasSelection: e.selection.length > 0,
   }))
   const [renderer, setRenderer] = useState<Renderer | null>(null)
-  const [dialog, setDialog] = useState<'shortcuts' | 'identity' | null>(null)
+  const [dialog, setDialog] = useState<'shortcuts' | 'identity' | 'versions' | null>(null)
+  const [following, setFollowing] = useFollow(editor, presence)
+  const { readOnly } = session
   const [toast, setToast] = useState<string | null>(null)
   const myColor = useSyncExternalStore(
     (onChange) => presence.subscribe(onChange),
@@ -63,15 +68,6 @@ export function App({ session }: { session: Session }) {
 
   const openShortcuts = useCallback(() => setDialog('shortcuts'), [])
 
-  const share = async () => {
-    try {
-      await navigator.clipboard.writeText(location.href)
-      setToast('Link copied. Anyone with it can view and edit this board.')
-    } catch {
-      setToast(`Copy this link to share: ${location.href}`)
-    }
-  }
-
   const exportBoard = async (format: 'png' | 'svg') => {
     const blob = format === 'svg' ? boardToSvg(editor, theme) : await boardToPng(editor, theme)
     if (!blob) return setToast('Nothing to export yet.')
@@ -92,12 +88,15 @@ export function App({ session }: { session: Session }) {
         reducedMotion={reducedMotion}
         onRenderer={setRenderer}
         onShortcuts={openShortcuts}
+        onNotice={setToast}
       />
-      <BoardStatus editor={editor} loaded={status.loaded} />
+      <BoardStatus editor={editor} loaded={status.loaded} readOnly={readOnly} />
+      <FollowBanner presence={presence} following={following} onStop={() => setFollowing(null)} />
       <TopBar
         session={session}
         onRename={() => setDialog('identity')}
-        onShare={() => void share()}
+        following={following}
+        onFollow={setFollowing}
         menu={
           <BoardMenu
             hasContent={hasContent}
@@ -106,12 +105,13 @@ export function App({ session }: { session: Session }) {
             onTheme={setPreference}
             onExport={(format) => void exportBoard(format)}
             onShortcuts={openShortcuts}
+            onHistory={readOnly ? null : () => setDialog('versions')}
           />
         }
       />
-      <StylePanel editor={editor} theme={theme} />
-      <Toolbar editor={editor} />
-      <HistoryControls editor={editor} />
+      {!readOnly && <StylePanel editor={editor} theme={theme} />}
+      {!readOnly && <Toolbar editor={editor} />}
+      {!readOnly && <HistoryControls editor={editor} />}
       <ZoomControls editor={editor} />
       {debug && <DebugHud editor={editor} renderer={renderer} />}
 
@@ -120,6 +120,12 @@ export function App({ session }: { session: Session }) {
       </div>
 
       <ShortcutsDialog open={dialog === 'shortcuts'} onClose={() => setDialog(null)} />
+      <VersionsDialog
+        open={dialog === 'versions'}
+        session={session}
+        onClose={() => setDialog(null)}
+        onRestored={setToast}
+      />
       <IdentityDialog
         open={dialog === 'identity'}
         user={presence.user}

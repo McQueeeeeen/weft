@@ -10,12 +10,16 @@ export default defineConfig({
     proxy: {
       '/ws': { target: syncServer, ws: true },
       '/health': { target: syncServer },
+      '/api': { target: syncServer },
+      '/assets': { target: syncServer },
     },
   },
   preview: {
     port: 4173,
     proxy: {
       '/ws': { target: syncServer, ws: true },
+      '/api': { target: syncServer },
+      '/assets': { target: syncServer },
     },
   },
   build: {

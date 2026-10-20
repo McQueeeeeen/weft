@@ -96,3 +96,60 @@ test('the home page leads to a new board', async ({ page }) => {
   await expect(page).toHaveURL(/\/b\/[a-z0-9]+$/)
   await expect(page.getByRole('heading', { name: 'An empty board' })).toBeVisible()
 })
+
+test('a view link shows the board live without letting the viewer edit', async ({ browser }) => {
+  const alice = await openBoard(browser)
+  await alice.getByRole('button', { name: 'Share' }).click()
+  const link = alice.getByLabel('Can view')
+  await expect(link).toHaveValue(/\/v\//)
+  const viewer = await openBoard(browser, new URL(await link.inputValue()).pathname)
+  await alice.keyboard.press('Escape')
+
+  await drawRect(alice, [300, 300], [500, 420])
+  await expect(summary(viewer)).toHaveText(/^1 object/)
+  await expect(viewer.getByRole('toolbar', { name: 'Tools' })).toHaveCount(0)
+
+  await drawRect(viewer, [700, 300], [800, 400])
+  await viewer.keyboard.press('Delete')
+  await expect(summary(viewer)).toHaveText(/^1 object/)
+  await expect(summary(alice)).toHaveText(/^1 object/)
+})
+
+test('a frame carries its contents and can be renamed', async ({ browser }) => {
+  const page = await openBoard(browser)
+  await page.keyboard.press('s')
+  await page.mouse.click(500, 380)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('f')
+  await page.mouse.move(380, 260)
+  await page.mouse.down()
+  await page.mouse.move(760, 560, { steps: 5 })
+  await page.mouse.up()
+
+  await page.mouse.dblclick(400, 245)
+  await page.getByLabel('Frame title').fill('Sprint ideas')
+  await page.keyboard.press('Enter')
+
+  await page.mouse.move(420, 245)
+  await page.mouse.down()
+  await page.mouse.move(620, 245, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.press('Escape')
+  await page.mouse.dblclick(700, 380)
+  await expect(page.getByLabel('Sticky note text')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.mouse.dblclick(620, 245)
+  await expect(page.getByLabel('Frame title')).toHaveValue('Sprint ideas')
+})
+
+test('following someone keeps your view on theirs', async ({ browser }) => {
+  const alice = await openBoard(browser)
+  const bob = await openBoard(browser, new URL(alice.url()).pathname)
+  await bob.getByRole('button', { name: /^Follow / }).click()
+
+  await alice.getByRole('button', { name: 'Zoom in' }).click()
+  await alice.getByRole('button', { name: 'Zoom in' }).click()
+  const zoom = await alice.locator('.zoom-level').textContent()
+  await expect(bob.locator('.zoom-level')).toHaveText(zoom!)
+  await expect(bob.getByText(/^Following /)).toBeVisible()
+})

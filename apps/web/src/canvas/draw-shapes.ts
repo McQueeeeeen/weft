@@ -1,5 +1,7 @@
 import {
   FONT_SIZE,
+  FRAME_TITLE_GAP,
+  FRAME_TITLE_SIZE,
   LINE_HEIGHT,
   STICKY_FONT_SIZE,
   STICKY_PADDING,
@@ -10,7 +12,8 @@ import {
   type Shape,
   type ShapeLookup,
 } from '@weft/core'
-import type { Theme } from './palette.ts'
+import { loadedImage } from './images.ts'
+import { BOARD_FONT, type Theme } from './palette.ts'
 import { fontFor, wrapText } from './text-layout.ts'
 
 export interface DrawContext {
@@ -117,6 +120,33 @@ export function drawShape(dc: DrawContext, shape: Shape): void {
       ctx.lineWidth = STROKE_WIDTH[shape.size]
       ctx.strokeStyle = colors.stroke
       ctx.stroke(path)
+      return
+    }
+
+    case 'image': {
+      const img = loadedImage(shape.src)
+      if (img) {
+        ctx.drawImage(img, shape.x, shape.y, shape.w, shape.h)
+        return
+      }
+      ctx.fillStyle = theme.content.ink.tint
+      ctx.fillRect(shape.x, shape.y, shape.w, shape.h)
+      return
+    }
+
+    case 'frame': {
+      ctx.fillStyle = theme.surface
+      ctx.strokeStyle = theme.grid
+      ctx.lineWidth = 1 / dc.zoom
+      ctx.beginPath()
+      ctx.roundRect(shape.x, shape.y, shape.w, shape.h, 6)
+      ctx.fill()
+      ctx.stroke()
+      if (shape.id === dc.editingId) return
+      ctx.font = `600 ${FRAME_TITLE_SIZE}px ${BOARD_FONT}`
+      ctx.fillStyle = colors.stroke
+      ctx.textBaseline = 'alphabetic'
+      ctx.fillText(shape.title || 'Untitled frame', shape.x + 2, shape.y - FRAME_TITLE_GAP - 4)
       return
     }
   }

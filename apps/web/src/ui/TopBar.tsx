@@ -6,17 +6,19 @@ import { thread } from '../canvas/palette.ts'
 import { initials } from '../collab/identity.ts'
 import type { Session, SessionStatus } from '../collab/session.ts'
 import { Logo } from './Logo.tsx'
+import { ShareMenu } from './ShareMenu.tsx'
 
 const MAX_AVATARS = 4
 
 interface TopBarProps {
   readonly session: Session
   readonly onRename: () => void
-  readonly onShare: () => void
+  readonly following: number | null
+  readonly onFollow: (clientId: number | null) => void
   readonly menu: React.ReactNode
 }
 
-export function TopBar({ session, onRename, onShare, menu }: TopBarProps) {
+export function TopBar({ session, onRename, following, onFollow, menu }: TopBarProps) {
   const status = useSyncExternalStore(
     (onChange) => session.subscribe(onChange),
     () => session.status,
@@ -27,12 +29,19 @@ export function TopBar({ session, onRename, onShare, menu }: TopBarProps) {
       <header className="brand panel">
         <Logo />
         <ConnectionLabel status={status} />
+        {session.readOnly && <span className="view-badge">View only</span>}
       </header>
       <div className="top-actions">
-        <People presence={session.presence} onRename={onRename} />
-        <button type="button" className="primary" onClick={onShare}>
+        <People
+          presence={session.presence}
+          onRename={onRename}
+          following={following}
+          onFollow={onFollow}
+        />
+        <button type="button" className="primary" popoverTarget="share-menu">
           Share
         </button>
+        <ShareMenu session={session} />
         <button
           type="button"
           className="icon-button panel"
@@ -64,7 +73,14 @@ function ConnectionLabel({ status }: { status: SessionStatus }) {
   )
 }
 
-function People({ presence, onRename }: { presence: Presence; onRename: () => void }) {
+interface PeopleProps {
+  readonly presence: Presence
+  readonly onRename: () => void
+  readonly following: number | null
+  readonly onFollow: (clientId: number | null) => void
+}
+
+function People({ presence, onRename, following, onFollow }: PeopleProps) {
   const people = usePeople(presence)
   const me = useSyncExternalStore(
     (onChange) => presence.subscribe(onChange),
@@ -87,16 +103,20 @@ function People({ presence, onRename }: { presence: Presence; onRename: () => vo
         {initials(me.name)}
       </button>
       {shown.map((p) => (
-        <span
+        <button
+          type="button"
           key={p.clientId}
           className="avatar"
           style={avatarStyle(p.user.color)}
-          title={p.user.name}
-          role="img"
-          aria-label={p.user.name}
+          aria-pressed={following === p.clientId}
+          onClick={() => onFollow(following === p.clientId ? null : p.clientId)}
+          title={
+            following === p.clientId ? `Stop following ${p.user.name}` : `Follow ${p.user.name}`
+          }
+          aria-label={`Follow ${p.user.name}`}
         >
           {initials(p.user.name)}
-        </span>
+        </button>
       ))}
       {hidden > 0 && (
         <button
@@ -114,5 +134,5 @@ function People({ presence, onRename }: { presence: Presence; onRename: () => vo
 
 function avatarStyle(color: number): React.CSSProperties {
   const c = thread(color)
-  return { background: c.fill, color: c.text }
+  return { background: c.fill, color: c.text, '--ring': c.fill } as React.CSSProperties
 }

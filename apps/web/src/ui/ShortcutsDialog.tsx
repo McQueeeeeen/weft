@@ -14,6 +14,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
       ['T or double-click', 'Text'],
       ['A', 'Arrow (start or end on a shape to connect it)'],
       ['P', 'Pen'],
+      ['F', 'Frame (moving it moves what is inside)'],
     ],
   },
   {

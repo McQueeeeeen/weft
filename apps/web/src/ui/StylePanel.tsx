@@ -34,7 +34,7 @@ const DRAWING_TOOLS = new Set(['rect', 'ellipse', 'sticky', 'text', 'arrow', 'pe
 
 export function StylePanel({ editor, theme }: { editor: Editor; theme: Theme }) {
   const view = useEditor(editor, (e) => {
-    const selected = e.selectedShapes()
+    const selected = e.selectedShapes().filter((s) => s.type !== 'frame' && s.type !== 'image')
     const tool = e.tool
     const types = new Set(selected.map((s) => s.type))
     const visible = (selected.length > 0 && e.editingId === null) || DRAWING_TOOLS.has(tool)

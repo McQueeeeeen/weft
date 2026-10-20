@@ -1,4 +1,5 @@
 import { Board, Editor, Presence, type PresenceUser } from '@weft/core'
+import type { BoardTarget } from '../app/routing.ts'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import * as Y from 'yjs'
@@ -11,11 +12,11 @@ export interface SessionStatus {
   readonly synced: boolean
 }
 
-function syncUrl(): string {
+function syncUrl(readOnly: boolean): string {
   const configured = import.meta.env.VITE_SYNC_URL as string | undefined
-  if (configured) return configured
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${location.host}/ws`
+  const base = configured ?? `${protocol}//${location.host}`
+  return `${base}/${readOnly ? 'ws-view' : 'ws'}`
 }
 
 export class Session {
@@ -29,13 +30,18 @@ export class Session {
   private readonly listeners = new Set<() => void>()
   private offlineTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(room: string, user: PresenceUser) {
-    this.board = new Board(this.doc)
-    this.network = new WebsocketProvider(syncUrl(), room, this.doc, { maxBackoffTime: 5000 })
-    this.presence = new Presence(this.network.awareness, user)
-    this.editor = new Editor({ board: this.board, presence: this.presence })
+  readonly room: string
+  readonly readOnly: boolean
 
-    this.local = openLocalReplica(room, this.doc)
+  constructor({ id, readOnly }: BoardTarget, user: PresenceUser) {
+    this.room = id
+    this.readOnly = readOnly
+    this.board = new Board(this.doc)
+    this.network = new WebsocketProvider(syncUrl(readOnly), id, this.doc, { maxBackoffTime: 5000 })
+    this.presence = new Presence(this.network.awareness, user)
+    this.editor = new Editor({ board: this.board, presence: this.presence, readOnly })
+
+    this.local = readOnly ? null : openLocalReplica(id, this.doc)
     if (this.local) {
       this.local.whenSynced.then(
         () => this.update({ loaded: true }),

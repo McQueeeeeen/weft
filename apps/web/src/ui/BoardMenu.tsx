@@ -8,6 +8,7 @@ interface BoardMenuProps {
   readonly onTheme: (theme: ThemePreference) => void
   readonly onExport: (format: 'png' | 'svg') => void
   readonly onShortcuts: () => void
+  readonly onHistory: (() => void) | null
 }
 
 const THEMES: { value: ThemePreference; label: string }[] = [
@@ -64,6 +65,18 @@ export function BoardMenu(props: BoardMenuProps) {
         </div>
       </fieldset>
       <hr />
+      {props.onHistory && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            close()
+            props.onHistory?.()
+          }}
+        >
+          Version history
+        </button>
+      )}
       <button
         type="button"
         role="menuitem"

@@ -2,6 +2,7 @@ import {
   ArrowUpRightIcon,
   CircleIcon,
   CursorIcon,
+  FrameCornersIcon,
   HandIcon,
   NoteBlankIcon,
   RectangleIcon,
@@ -20,6 +21,7 @@ const TOOL_ICONS: Record<ToolId, Icon> = {
   ellipse: CircleIcon,
   sticky: NoteBlankIcon,
   text: TextTIcon,
+  frame: FrameCornersIcon,
   arrow: ArrowUpRightIcon,
   pen: PencilSimpleIcon,
 }
@@ -31,6 +33,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   ellipse: 'Ellipse',
   sticky: 'Sticky note',
   text: 'Text',
+  frame: 'Frame',
   arrow: 'Arrow',
   pen: 'Pen',
 }
@@ -38,7 +41,7 @@ export const TOOL_LABELS: Record<ToolId, string> = {
 const GROUPS: ToolId[][] = [
   ['select', 'hand'],
   ['rect', 'ellipse', 'sticky', 'text'],
-  ['arrow', 'pen'],
+  ['arrow', 'pen', 'frame'],
 ]
 
 const SHORTCUT_FOR = Object.fromEntries(

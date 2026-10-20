@@ -1,7 +1,15 @@
 import { createId } from '@weft/core'
 
-const BOARD_PATH = /^\/b\/([A-Za-z0-9_-]{1,64})\/?$/
+export interface BoardTarget {
+  readonly id: string
+  readonly readOnly: boolean
+}
 
-export const boardIdFromPath = (): string | null => BOARD_PATH.exec(location.pathname)?.[1] ?? null
+const BOARD_PATH = /^\/(b|v)\/([A-Za-z0-9_-]{1,64})\/?$/
+
+export function boardFromPath(): BoardTarget | null {
+  const match = BOARD_PATH.exec(location.pathname)
+  return match ? { id: match[2]!, readOnly: match[1] === 'v' } : null
+}
 
 export const newBoardUrl = () => `/b/${createId()}`

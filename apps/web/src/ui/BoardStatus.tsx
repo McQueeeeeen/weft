@@ -5,7 +5,13 @@ import { useEditor } from '../app/hooks.ts'
 
 const ANNOUNCE_DELAY_MS = 600
 
-export function BoardStatus({ editor, loaded }: { editor: Editor; loaded: boolean }) {
+interface BoardStatusProps {
+  readonly editor: Editor
+  readonly loaded: boolean
+  readonly readOnly: boolean
+}
+
+export function BoardStatus({ editor, loaded, readOnly }: BoardStatusProps) {
   const { count, selected, tool } = useEditor(editor, (e) => ({
     count: e.board.size,
     selected: e.selection.length,
@@ -29,7 +35,10 @@ export function BoardStatus({ editor, loaded }: { editor: Editor; loaded: boolea
           Opening board…
         </p>
       )}
-      {loaded && count === 0 && tool === 'select' && (
+      {loaded && count === 0 && readOnly && (
+        <p className="board-hint">Nothing on this board yet. New work appears here live.</p>
+      )}
+      {loaded && count === 0 && !readOnly && tool === 'select' && (
         <section className="welcome panel" aria-labelledby="welcome-title">
           <h1 id="welcome-title">An empty board</h1>
           <p>Everything drawn here is shared live with anyone who has the link.</p>

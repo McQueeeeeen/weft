@@ -812,6 +812,132 @@ kbd {
   background: none;
 }
 
+.share-menu {
+  width: min(400px, calc(100vw - 2 * var(--gutter)));
+  padding: 16px;
+}
+
+.share-menu h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.share-row {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.share-row label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.share-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.share-field input {
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  background: var(--board);
+  font-size: 13px;
+}
+
+.share-menu .menu-note {
+  margin: 4px 0 0;
+}
+
+.view-badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--pressed);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dialog-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.versions {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.versions li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.version-time {
+  font-weight: 600;
+}
+
+.version-meta {
+  grid-row: 2;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.versions .secondary {
+  grid-row: span 2;
+  grid-column: 2;
+}
+
+.follow {
+  position: fixed;
+  inset: 0;
+  border: 3px solid var(--follow);
+  pointer-events: none;
+}
+
+.follow-tag {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 4px 6px 6px 12px;
+  border-radius: 0 0 10px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: auto;
+}
+
+.follow-tag button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.24);
+  color: inherit;
+  font-weight: 600;
+}
+
+.avatar[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 2px var(--board),
+    0 0 0 4px var(--ring);
+}
+
 @media (max-width: 720px) {
   :root {
     --gutter: 12px;
@@ -1148,4 +1274,9 @@ kbd {
   button {
     transition: none;
   }
+}
+
+.text-editor.is-frame {
+  font-weight: 600;
+  white-space: pre;
 }
