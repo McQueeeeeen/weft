@@ -1,0 +1,18 @@
+{
+  "name": "@weft/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-free board engine: document model, geometry, tools, history, presence.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "fractional-indexing": "4.0.0",
+    "y-protocols": "1.0.7",
+    "yjs": "13.6.33"
+  }
+}
