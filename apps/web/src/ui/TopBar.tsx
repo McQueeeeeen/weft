@@ -1,10 +1,10 @@
+import { DotsThreeIcon } from '@phosphor-icons/react'
 import type { Presence } from '@weft/core'
 import { useState, useSyncExternalStore } from 'react'
 import { usePeople } from '../app/hooks.ts'
 import { thread } from '../canvas/palette.ts'
 import { initials } from '../collab/identity.ts'
 import type { Session, SessionStatus } from '../collab/session.ts'
-import { MoreIcon } from './icons.tsx'
 
 const MAX_AVATARS = 4
 
@@ -39,7 +39,7 @@ export function TopBar({ session, onRename, onShare, menu }: TopBarProps) {
           aria-label="Board menu"
           title="Board menu"
         >
-          <MoreIcon />
+          <DotsThreeIcon weight="bold" />
         </button>
         {menu}
       </div>

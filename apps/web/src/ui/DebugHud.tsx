@@ -19,11 +19,11 @@ export function DebugHud({ editor, renderer }: { editor: Editor; renderer: Rende
         <dt>Objects</dt>
         <dd>{editor.board.size.toLocaleString()}</dd>
         <dt>Drawn</dt>
-        <dd>{stats?.visible.toLocaleString() ?? '–'}</dd>
+        <dd>{stats?.visible.toLocaleString() ?? '-'}</dd>
         <dt>Frames/s</dt>
-        <dd>{stats?.fps ?? '–'}</dd>
+        <dd>{stats?.fps ?? '-'}</dd>
         <dt>Last frame</dt>
-        <dd>{stats ? `${stats.frameMs.toFixed(1)} ms` : '–'}</dd>
+        <dd>{stats ? `${stats.frameMs.toFixed(1)} ms` : '-'}</dd>
       </dl>
       <button type="button" onClick={() => addStressShapes(editor)}>
         Add {STRESS_BATCH.toLocaleString()} shapes

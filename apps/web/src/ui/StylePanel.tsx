@@ -1,3 +1,9 @@
+import {
+  SelectionBackgroundIcon,
+  SelectionForegroundIcon,
+  CopySimpleIcon,
+  TrashIcon,
+} from '@phosphor-icons/react'
 import { COLORS, hasFill, type ColorToken, type Editor, type Fill, type Size } from '@weft/core'
 import type { Theme } from '../canvas/palette.ts'
 import { useEditor } from '../app/hooks.ts'
@@ -113,26 +119,38 @@ export function StylePanel({ editor, theme }: { editor: Editor; theme: Theme }) 
 
       {view.hasSelection && (
         <div className="style-group selection-actions" role="group" aria-label="Arrange">
-          <button type="button" onClick={() => editor.bringToFront()} title="Bring to front (])">
-            To front
+          <button
+            type="button"
+            onClick={() => editor.bringToFront()}
+            title="Bring to front (])"
+            aria-label="Bring to front"
+          >
+            <SelectionForegroundIcon />
           </button>
-          <button type="button" onClick={() => editor.sendToBack()} title="Send to back ([)">
-            To back
+          <button
+            type="button"
+            onClick={() => editor.sendToBack()}
+            title="Send to back ([)"
+            aria-label="Send to back"
+          >
+            <SelectionBackgroundIcon />
           </button>
           <button
             type="button"
             onClick={() => editor.duplicateSelected()}
             title="Duplicate (Ctrl+D)"
+            aria-label="Duplicate"
           >
-            Duplicate
+            <CopySimpleIcon />
           </button>
           <button
             type="button"
             className="danger"
             onClick={() => editor.deleteSelected()}
             title="Delete (Del)"
+            aria-label={view.count > 1 ? `Delete ${view.count} objects` : 'Delete'}
           >
-            Delete{view.count > 1 ? ` ${view.count}` : ''}
+            <TrashIcon />
           </button>
         </div>
       )}

@@ -1,8 +1,8 @@
 :root {
   --board: #f1f2f4;
-  --surface: #ffffff;
+  --surface: #fcfcfd;
   --ink: #14161a;
-  --on-ink: #ffffff;
+  --on-ink: #fcfcfd;
   --muted: #5c6370;
   --line: #dfe2e6;
   --control-line: #8a909b;
@@ -65,6 +65,14 @@ button {
 button:disabled {
   cursor: default;
   opacity: 0.35;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+button {
+  transition: transform 90ms ease-out;
 }
 
 :focus-visible {
@@ -409,12 +417,12 @@ kbd {
 
 .tool-key {
   position: absolute;
-  top: 3px;
+  top: 2px;
   right: 4px;
   padding: 0;
   background: none;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .style-panel {
@@ -461,18 +469,19 @@ kbd {
 
 .selection-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding-top: 14px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
 .selection-actions button {
-  min-height: 36px;
-  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border: 0;
   border-radius: 8px;
   background: none;
-  font-size: 13px;
 }
 
 .selection-actions button:hover {
@@ -612,11 +621,31 @@ kbd {
 }
 
 .dialog {
-  width: min(560px, calc(100% - 2 * var(--gutter)));
+  width: min(440px, calc(100% - 2 * var(--gutter)));
   max-height: calc(100% - 2 * var(--gutter));
   padding: 22px 24px 24px;
   border-radius: 16px;
   color: var(--ink);
+}
+
+.dialog.wide {
+  width: min(780px, calc(100% - 2 * var(--gutter)));
+}
+
+.dialog[open],
+.menu:popover-open {
+  animation: appear 140ms ease-out;
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.dialog-head h2:focus {
+  outline: none;
 }
 
 .dialog::backdrop {
@@ -639,7 +668,13 @@ kbd {
 
 .shortcut-groups {
   display: grid;
-  gap: 20px;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 20px 32px;
+}
+
+.shortcut-groups section:nth-child(2) {
+  grid-row: span 2;
 }
 
 .shortcut-groups h3 {
@@ -655,10 +690,11 @@ kbd {
 
 .shortcut-row {
   display: grid;
-  grid-template-columns: minmax(140px, 40%) 1fr;
+  grid-template-columns: 9.5em 1fr;
   gap: 12px;
-  padding: 7px 0;
+  padding: 6px 0;
   border-top: 1px solid var(--line);
+  font-size: 13px;
 }
 
 .shortcut-row dd {
@@ -668,6 +704,30 @@ kbd {
 .identity-form {
   display: grid;
   gap: 14px;
+}
+
+.identity-name {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: end;
+  gap: 14px;
+}
+
+.identity-name .avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 15px;
+}
+
+.identity-form .swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.identity-form .swatch {
+  width: 40px;
+  height: 40px;
 }
 
 .field {
@@ -805,8 +865,20 @@ kbd {
   }
 }
 
+@media (max-width: 720px) {
+  .shortcut-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast,
+  .dialog[open],
+  .menu:popover-open {
     animation: none;
+  }
+
+  button {
+    transition: none;
   }
 }

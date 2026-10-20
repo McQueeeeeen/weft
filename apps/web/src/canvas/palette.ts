@@ -22,7 +22,7 @@ const LIGHT: Theme = {
   name: 'light',
   board: '#F1F2F4',
   grid: '#D2D6DC',
-  surface: '#FFFFFF',
+  surface: '#FCFCFD',
   content: {
     ink: { stroke: '#14161A', tint: '#E2E4E8', sticky: '#E2E4E8', stickyText: STICKY_TEXT },
     red: { stroke: '#C92A2A', tint: '#FFE3E3', sticky: '#FFC9C9', stickyText: STICKY_TEXT },

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@fontsource-variable/onest": "5.3.1",
+    "@phosphor-icons/react": "2.1.10",
     "@weft/core": "workspace:*",
     "react": "19.3.1",
     "react-dom": "19.3.1",

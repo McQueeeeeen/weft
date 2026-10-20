@@ -1,6 +1,7 @@
 import { MAX_NAME_LENGTH, PRESENCE_COLOR_COUNT, type PresenceUser } from '@weft/core'
 import { useState } from 'react'
 import { thread } from '../canvas/palette.ts'
+import { initials } from '../collab/identity.ts'
 import { Dialog } from './Dialog.tsx'
 
 interface IdentityDialogProps {
@@ -31,18 +32,33 @@ function IdentityForm({ user, onSave }: { user: PresenceUser; onSave: (u: Presen
         if (trimmed) onSave({ name: trimmed, color })
       }}
     >
-      <label className="field">
-        <span>Name</span>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={MAX_NAME_LENGTH}
-          autoFocus
-          autoComplete="nickname"
-          aria-describedby="name-hint"
-          aria-invalid={trimmed === ''}
-        />
-      </label>
+      <div className="identity-name">
+        <span
+          className="avatar me"
+          style={
+            {
+              background: thread(color).fill,
+              color: thread(color).text,
+              '--thread': thread(color).fill,
+            } as React.CSSProperties
+          }
+          aria-hidden="true"
+        >
+          {initials(trimmed || '?')}
+        </span>
+        <label className="field">
+          <span>Name</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={MAX_NAME_LENGTH}
+            data-autofocus
+            autoComplete="nickname"
+            aria-describedby="name-hint"
+            aria-invalid={trimmed === ''}
+          />
+        </label>
+      </div>
       <p id="name-hint" className={trimmed === '' ? 'field-error' : 'field-hint'}>
         {trimmed === ''
           ? 'Enter a name so others know who is editing.'

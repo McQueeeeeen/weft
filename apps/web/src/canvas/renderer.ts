@@ -292,8 +292,8 @@ export class Renderer {
       ctx.beginPath()
       ctx.moveTo(a.x, a.y)
       ctx.lineTo(b.x, b.y)
-      ctx.globalAlpha = 0.5
-      ctx.lineWidth = width + 4
+      ctx.globalAlpha = 0.28
+      ctx.lineWidth = width + 8
       ctx.stroke()
       ctx.globalAlpha = 1
       return boxFromPoints(a, b)

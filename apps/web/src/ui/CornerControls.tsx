@@ -1,6 +1,12 @@
+import {
+  ArrowUUpLeftIcon,
+  ArrowUUpRightIcon,
+  CornersOutIcon,
+  MinusIcon,
+  PlusIcon,
+} from '@phosphor-icons/react'
 import type { Editor } from '@weft/core'
 import { useEditor } from '../app/hooks.ts'
-import { FitIcon, MinusIcon, PlusIcon, RedoIcon, UndoIcon } from './icons.tsx'
 
 const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
 
@@ -19,7 +25,7 @@ export function HistoryControls({ editor }: { editor: Editor }) {
         aria-label="Undo"
         title={`Undo your last change (${mod}Z)`}
       >
-        <UndoIcon />
+        <ArrowUUpLeftIcon />
       </button>
       <button
         type="button"
@@ -29,7 +35,7 @@ export function HistoryControls({ editor }: { editor: Editor }) {
         aria-label="Redo"
         title={`Redo (${mod}Shift+Z)`}
       >
-        <RedoIcon />
+        <ArrowUUpRightIcon />
       </button>
     </div>
   )
@@ -73,7 +79,7 @@ export function ZoomControls({ editor }: { editor: Editor }) {
         aria-label="Fit board in view"
         title="Fit board in view (Shift+1)"
       >
-        <FitIcon />
+        <CornersOutIcon />
       </button>
     </div>
   )

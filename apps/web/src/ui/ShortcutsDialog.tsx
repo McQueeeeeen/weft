@@ -46,7 +46,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
 
 export function ShortcutsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Dialog open={open} title="Keyboard shortcuts" onClose={onClose}>
+    <Dialog open={open} title="Keyboard shortcuts" onClose={onClose} wide>
       <div className="shortcut-groups">
         {GROUPS.map((group) => (
           <section key={group.title}>

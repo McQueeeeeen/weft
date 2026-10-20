@@ -1,7 +1,28 @@
+import {
+  ArrowUpRightIcon,
+  CircleIcon,
+  CursorIcon,
+  HandIcon,
+  NoteBlankIcon,
+  RectangleIcon,
+  PencilSimpleIcon,
+  TextTIcon,
+  type Icon,
+} from '@phosphor-icons/react'
 import { TOOL_SHORTCUTS, type Editor, type ToolId } from '@weft/core'
 import { Fragment } from 'react'
 import { useEditor } from '../app/hooks.ts'
-import { TOOL_ICONS } from './icons.tsx'
+
+const TOOL_ICONS: Record<ToolId, Icon> = {
+  select: CursorIcon,
+  hand: HandIcon,
+  rect: RectangleIcon,
+  ellipse: CircleIcon,
+  sticky: NoteBlankIcon,
+  text: TextTIcon,
+  arrow: ArrowUpRightIcon,
+  pen: PencilSimpleIcon,
+}
 
 export const TOOL_LABELS: Record<ToolId, string> = {
   select: 'Select',
@@ -32,23 +53,26 @@ export function Toolbar({ editor }: { editor: Editor }) {
       {GROUPS.map((group, i) => (
         <Fragment key={group[0]}>
           {i > 0 && <span className="tool-divider" aria-hidden="true" />}
-          {group.map((tool) => (
-            <button
-              key={tool}
-              type="button"
-              className="tool-button"
-              aria-pressed={active === tool}
-              aria-label={TOOL_LABELS[tool]}
-              aria-keyshortcuts={SHORTCUT_FOR[tool]}
-              title={`${TOOL_LABELS[tool]} (${SHORTCUT_FOR[tool]})`}
-              onClick={() => editor.setTool(tool)}
-            >
-              {TOOL_ICONS[tool]}
-              <kbd className="tool-key" aria-hidden="true">
-                {SHORTCUT_FOR[tool]}
-              </kbd>
-            </button>
-          ))}
+          {group.map((tool) => {
+            const ToolIcon = TOOL_ICONS[tool]
+            return (
+              <button
+                key={tool}
+                type="button"
+                className="tool-button"
+                aria-pressed={active === tool}
+                aria-label={TOOL_LABELS[tool]}
+                aria-keyshortcuts={SHORTCUT_FOR[tool]}
+                title={`${TOOL_LABELS[tool]} (${SHORTCUT_FOR[tool]})`}
+                onClick={() => editor.setTool(tool)}
+              >
+                <ToolIcon />
+                <kbd className="tool-key" aria-hidden="true">
+                  {SHORTCUT_FOR[tool]}
+                </kbd>
+              </button>
+            )
+          })}
         </Fragment>
       ))}
     </div>
