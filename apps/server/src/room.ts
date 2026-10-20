@@ -24,6 +24,8 @@ export interface RoomOptions {
   readonly logger: Logger
   readonly saveDebounceMs: number
   readonly saveMaxWaitMs: number
+  readonly versionIntervalMs: number
+  readonly maxVersions: number
   readonly onDisconnect?: (room: Room) => void
 }
 
@@ -34,6 +36,8 @@ export class Room {
 
   private readonly options: RoomOptions
   private readonly connections = new Map<WebSocket, Set<number>>()
+  private readonly readers = new WeakSet<WebSocket>()
+  private lastVersionAt = 0
   private saveTimer: NodeJS.Timeout | null = null
   private firstUnsavedAt: number | null = null
   private saving: Promise<void> = Promise.resolve()
@@ -46,8 +50,10 @@ export class Room {
 
   static async load(options: RoomOptions): Promise<Room> {
     const room = new Room(options)
-    const state = await options.persistence.load(options.name)
+    const state = await options.persistence.get(`rooms/${options.name}`)
     if (state) Y.applyUpdate(room.doc, state, PERSISTENCE_ORIGIN)
+    const versions = await options.persistence.list(`versions/${options.name}`)
+    room.lastVersionAt = Math.max(0, ...versions.map(Number))
     room.doc.on('update', room.onDocUpdate)
     room.awareness.on('update', room.onAwarenessUpdate)
     return room
@@ -57,8 +63,9 @@ export class Room {
     return this.connections.size
   }
 
-  connect(ws: WebSocket, buffered: readonly Uint8Array[] = []): void {
+  connect(ws: WebSocket, buffered: readonly Uint8Array[] = [], readOnly = false): void {
     this.connections.set(ws, new Set())
+    if (readOnly) this.readers.add(ws)
     ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => this.onMessage(ws, toBytes(data)))
     ws.on('close', () => this.disconnect(ws))
     ws.on('error', () => this.disconnect(ws))
@@ -81,11 +88,23 @@ export class Room {
     this.firstUnsavedAt = null
     const state = Y.encodeStateAsUpdate(this.doc)
     this.saving = this.saving
-      .then(() => this.options.persistence.save(this.name, state))
+      .then(() => this.options.persistence.put(`rooms/${this.name}`, state))
+      .then(() => this.recordVersion(state))
       .catch((error: unknown) => {
         this.options.logger.error('snapshot failed', { room: this.name, error: String(error) })
       })
     return this.saving
+  }
+
+  private async recordVersion(state: Uint8Array): Promise<void> {
+    const now = Date.now()
+    if (now - this.lastVersionAt < this.options.versionIntervalMs) return
+    this.lastVersionAt = now
+    const { persistence, maxVersions } = this.options
+    const dir = `versions/${this.name}`
+    await persistence.put(`${dir}/${now}`, state)
+    const all = (await persistence.list(dir)).map(Number).sort((a, b) => b - a)
+    await Promise.all(all.slice(maxVersions).map((at) => persistence.delete(`${dir}/${at}`)))
   }
 
   closeAll(code: number, reason: string): void {
@@ -104,6 +123,12 @@ export class Room {
       const type = decoding.readVarUint(decoder)
       switch (type) {
         case MESSAGE_SYNC: {
+          if (
+            this.readers.has(ws) &&
+            decoding.peekVarUint(decoder) !== syncProtocol.messageYjsSyncStep1
+          ) {
+            break
+          }
           const encoder = encoding.createEncoder()
           encoding.writeVarUint(encoder, MESSAGE_SYNC)
           syncProtocol.readSyncMessage(decoder, encoder, this.doc, ws)

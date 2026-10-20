@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { WebsocketProvider } from 'y-websocket'
 import * as Y from 'yjs'
-import { FilePersistence, MemoryPersistence, type Persistence } from './persistence.ts'
+import { FilePersistence, MemoryPersistence } from './persistence.ts'
 import { startServer, type RunningServer, type ServerOptions } from './server.ts'
 
 const cleanups: (() => Promise<void> | void)[] = []
@@ -26,9 +26,9 @@ async function start(options: Partial<ServerOptions> = {}): Promise<RunningServe
   return server
 }
 
-function connect(server: RunningServer, room: string) {
+function connect(server: RunningServer, room: string, endpoint = 'ws') {
   const doc = new Y.Doc()
-  const provider = new WebsocketProvider(`ws://127.0.0.1:${server.port}/ws`, room, doc, {
+  const provider = new WebsocketProvider(`ws://127.0.0.1:${server.port}/${endpoint}`, room, doc, {
     WebSocketPolyfill: WebSocket,
     disableBc: true,
   })
@@ -99,7 +99,7 @@ describe('sync server', () => {
     const a = connect(first, 'durable')
     await waitFor(() => a.provider.synced)
     a.map.set('kept', 42)
-    await waitFor(() => persistence.rooms.has('durable'))
+    await waitFor(() => persistence.entries.has('rooms/durable'))
     a.provider.destroy()
     await first.close()
 
@@ -111,11 +111,10 @@ describe('sync server', () => {
   it('does not lose the first messages of a client that connects while the room loads', async () => {
     const stored = new Y.Doc()
     stored.getMap('test').set('from-disk', 1)
-    const slow: Persistence = {
-      load: () =>
-        new Promise((resolve) => setTimeout(() => resolve(Y.encodeStateAsUpdate(stored)), 150)),
-      save: () => Promise.resolve(),
-    }
+    const slow = new MemoryPersistence()
+    slow.entries.set('rooms/slow', Y.encodeStateAsUpdate(stored))
+    const get = slow.get.bind(slow)
+    slow.get = (key) => new Promise((resolve) => setTimeout(() => resolve(get(key)), 150))
     const server = await start({ persistence: slow })
     const a = connect(server, 'slow')
     await waitFor(() => a.map.get('from-disk') === 1)
@@ -130,7 +129,7 @@ describe('sync server', () => {
     a.map.set('x', 1)
     a.provider.destroy()
     await waitFor(() => server.roomCount === 0)
-    expect(persistence.rooms.has('transient')).toBe(true)
+    expect(persistence.entries.has('rooms/transient')).toBe(true)
   })
 
   it('rejects invalid room names', async () => {
@@ -186,10 +185,116 @@ describe('FilePersistence', () => {
     const dir = await mkdtemp(join(tmpdir(), 'weft-data-'))
     cleanups.push(() => rm(dir, { recursive: true, force: true }))
     const persistence = new FilePersistence(join(dir, 'nested'))
-    expect(await persistence.load('missing')).toBeNull()
-    await persistence.save('room', new Uint8Array([1, 2, 3]))
-    await persistence.save('room', new Uint8Array([4, 5]))
-    expect(await persistence.load('room')).toEqual(new Uint8Array([4, 5]))
-    expect(await readdir(join(dir, 'nested'))).toEqual(['room.ydoc'])
+    expect(await persistence.get('rooms/missing')).toBeNull()
+    expect(await persistence.list('rooms')).toEqual([])
+    await persistence.put('rooms/a', new Uint8Array([1, 2, 3]))
+    await persistence.put('rooms/a', new Uint8Array([4, 5]))
+    expect(await persistence.get('rooms/a')).toEqual(new Uint8Array([4, 5]))
+    expect(await readdir(join(dir, 'nested', 'rooms'))).toEqual(['a'])
+    await persistence.delete('rooms/a')
+    expect(await persistence.list('rooms')).toEqual([])
+  })
+})
+
+describe('view-only links', () => {
+  it('lets viewers see the board but drops their edits', async () => {
+    const server = await start()
+    const base = `http://127.0.0.1:${server.port}`
+    const editor = connect(server, 'shared')
+    await waitFor(() => editor.provider.synced)
+    editor.map.set('x', 1)
+
+    const created = await fetch(`${base}/api/rooms/shared/view`, { method: 'POST' })
+    const { viewId } = (await created.json()) as { viewId: string }
+    const again = await fetch(`${base}/api/rooms/shared/view`, { method: 'POST' })
+    expect(((await again.json()) as { viewId: string }).viewId).toBe(viewId)
+
+    const viewer = connect(server, viewId, 'ws-view')
+    await waitFor(() => viewer.map.get('x') === 1)
+    viewer.map.set('y', 2)
+    editor.map.set('z', 3)
+    await waitFor(() => viewer.map.get('z') === 3)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(editor.map.get('y')).toBeUndefined()
+  })
+
+  it('refuses unknown view links', async () => {
+    const server = await start()
+    const code = await new Promise<number>((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws-view/nope`)
+      ws.onclose = (event) => resolve(event.code)
+    })
+    expect(code).toBe(4404)
+  })
+})
+
+describe('version history', () => {
+  it('keeps snapshots and serves them back', async () => {
+    const server = await start({ versionIntervalMs: 0, maxVersions: 2 })
+    const base = `http://127.0.0.1:${server.port}`
+    const a = connect(server, 'history')
+    await waitFor(() => a.provider.synced)
+    const shapes = a.doc.getMap('shapes')
+    for (const id of ['one', 'two', 'three']) {
+      shapes.set(id, new Y.Map())
+      await new Promise((r) => setTimeout(r, 60))
+    }
+    const list = async () =>
+      (await (await fetch(`${base}/api/rooms/history/versions`)).json()) as {
+        at: number
+        objects: number
+      }[]
+    let versions = await list()
+    for (let i = 0; i < 20 && versions[0]?.objects !== 3; i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      versions = await list()
+    }
+    expect(versions).toHaveLength(2)
+    expect(versions[0]!.objects).toBe(3)
+    expect(versions[0]!.at).toBeGreaterThan(versions[1]!.at)
+
+    const res = await fetch(`${base}/api/rooms/history/versions/${versions[1]!.at}`)
+    const restored = new Y.Doc()
+    Y.applyUpdate(restored, new Uint8Array(await res.arrayBuffer()))
+    expect(restored.getMap('shapes').size).toBe(2)
+  })
+})
+
+describe('image assets', () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
+
+  it('stores images by content and serves them', async () => {
+    const server = await start()
+    const base = `http://127.0.0.1:${server.port}`
+    const upload = () =>
+      fetch(`${base}/api/assets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png' },
+        body: png,
+      })
+    const first = (await (await upload()).json()) as { url: string }
+    const second = (await (await upload()).json()) as { url: string }
+    expect(first.url).toBe(second.url)
+    expect(first.url).toMatch(/^\/assets\/[a-f0-9]{64}\.png$/)
+    const served = await fetch(`${base}${first.url}`)
+    expect(served.headers.get('content-type')).toBe('image/png')
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(png)
+  })
+
+  it('rejects other file types and oversized uploads', async () => {
+    const server = await start()
+    const base = `http://127.0.0.1:${server.port}`
+    const svg = await fetch(`${base}/api/assets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/svg+xml' },
+      body: '<svg/>',
+    })
+    expect(svg.status).toBe(415)
+    const big = await fetch(`${base}/api/assets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/png' },
+      body: new Uint8Array(5 * 1024 * 1024 + 1),
+    }).catch(() => null)
+    expect(big === null || big.status === 413).toBe(true)
   })
 })

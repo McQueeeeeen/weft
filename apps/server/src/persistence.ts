@@ -1,51 +1,75 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 export interface Persistence {
-  load(room: string): Promise<Uint8Array | null>
-  save(room: string, state: Uint8Array): Promise<void>
+  get(key: string): Promise<Uint8Array | null>
+  put(key: string, value: Uint8Array): Promise<void>
+  list(dir: string): Promise<string[]>
+  delete(key: string): Promise<void>
 }
 
 export class MemoryPersistence implements Persistence {
-  readonly rooms = new Map<string, Uint8Array>()
+  readonly entries = new Map<string, Uint8Array>()
 
-  load(room: string): Promise<Uint8Array | null> {
-    return Promise.resolve(this.rooms.get(room) ?? null)
+  get(key: string): Promise<Uint8Array | null> {
+    return Promise.resolve(this.entries.get(key) ?? null)
   }
 
-  save(room: string, state: Uint8Array): Promise<void> {
-    this.rooms.set(room, state)
+  put(key: string, value: Uint8Array): Promise<void> {
+    this.entries.set(key, value)
+    return Promise.resolve()
+  }
+
+  list(dir: string): Promise<string[]> {
+    const prefix = `${dir}/`
+    return Promise.resolve(
+      [...this.entries.keys()]
+        .filter((k) => k.startsWith(prefix) && !k.slice(prefix.length).includes('/'))
+        .map((k) => k.slice(prefix.length)),
+    )
+  }
+
+  delete(key: string): Promise<void> {
+    this.entries.delete(key)
     return Promise.resolve()
   }
 }
 
 export class FilePersistence implements Persistence {
-  private readonly dir: string
-  private ready: Promise<void> | null = null
+  private readonly root: string
 
-  constructor(dir: string) {
-    this.dir = dir
+  constructor(root: string) {
+    this.root = root
   }
 
-  async load(room: string): Promise<Uint8Array | null> {
+  async get(key: string): Promise<Uint8Array | null> {
     try {
-      return new Uint8Array(await readFile(this.pathFor(room)))
+      return new Uint8Array(await readFile(join(this.root, key)))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
       throw error
     }
   }
 
-  async save(room: string, state: Uint8Array): Promise<void> {
-    this.ready ??= mkdir(this.dir, { recursive: true }).then(() => undefined)
-    await this.ready
-    const target = this.pathFor(room)
+  async put(key: string, value: Uint8Array): Promise<void> {
+    const target = join(this.root, key)
+    await mkdir(dirname(target), { recursive: true })
     const temp = `${target}.${process.pid}.${Date.now()}.tmp`
-    await writeFile(temp, state)
+    await writeFile(temp, value)
     await rename(temp, target)
   }
 
-  private pathFor(room: string): string {
-    return join(this.dir, `${room}.ydoc`)
+  async list(dir: string): Promise<string[]> {
+    try {
+      const names = await readdir(join(this.root, dir), { withFileTypes: true })
+      return names.filter((d) => d.isFile() && !d.name.endsWith('.tmp')).map((d) => d.name)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    await rm(join(this.root, key), { force: true })
   }
 }

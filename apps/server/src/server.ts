@@ -2,12 +2,13 @@ import { createServer, type IncomingMessage } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
+import { HttpError, ID, createApi, resolveView } from './api.ts'
 import { silentLogger, type Logger } from './logger.ts'
 import type { Persistence } from './persistence.ts'
 import { Room } from './room.ts'
 import { createStaticHandler } from './static.ts'
 
-export const ROOM_PATTERN = /^\/ws\/([A-Za-z0-9_-]{1,64})$/
+const SOCKET_PATTERN = new RegExp(`^/(ws|ws-view)/(${ID})$`)
 
 export interface ServerOptions {
   readonly port: number
@@ -17,6 +18,8 @@ export interface ServerOptions {
   readonly staticDir?: string | null
   readonly saveDebounceMs?: number
   readonly saveMaxWaitMs?: number
+  readonly versionIntervalMs?: number
+  readonly maxVersions?: number
   readonly unloadDelayMs?: number
   readonly heartbeatMs?: number
   readonly maxPayload?: number
@@ -36,6 +39,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const rooms = new Map<string, Promise<Room>>()
   const unloadTimers = new Map<string, NodeJS.Timeout>()
   const serveStatic = options.staticDir ? createStaticHandler(options.staticDir) : null
+  const api = createApi(options.persistence)
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: options.maxPayload ?? 2 * 1024 * 1024,
@@ -73,6 +77,8 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         logger,
         saveDebounceMs: options.saveDebounceMs ?? 1000,
         saveMaxWaitMs: options.saveMaxWaitMs ?? 10_000,
+        versionIntervalMs: options.versionIntervalMs ?? 10 * 60_000,
+        maxVersions: options.maxVersions ?? 30,
         onDisconnect: scheduleUnload,
       })
       rooms.set(name, room)
@@ -91,24 +97,26 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         res.end(JSON.stringify({ status: 'ok', rooms: rooms.size, connections: wss.clients.size }))
         return
       }
+      if (await api(req, res)) return
       if (serveStatic && (await serveStatic(req, res))) return
-      res.writeHead(404, { 'Content-Type': 'text/plain' })
-      res.end('Not found')
+      throw new HttpError(404, 'Not found')
     })().catch((error: unknown) => {
-      logger.error('request failed', { url: req.url, error: String(error) })
-      if (!res.headersSent) res.writeHead(500)
-      res.end()
+      const status = error instanceof HttpError ? error.status : 500
+      if (status === 500) logger.error('request failed', { url: req.url, error: String(error) })
+      if (!res.headersSent) res.writeHead(status, { 'Content-Type': 'text/plain' })
+      res.end(error instanceof HttpError ? error.message : '')
     })
   })
 
   http.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const pathname = new URL(req.url ?? '/', 'http://local').pathname
-    const match = ROOM_PATTERN.exec(pathname)
+    const match = SOCKET_PATTERN.exec(pathname)
     if (!match) {
       socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
       return
     }
-    const name = match[1]!
+    const readOnly = match[1] === 'ws-view'
+    const id = match[2]!
     wss.handleUpgrade(req, socket, head, (ws: AliveSocket) => {
       ws.isAlive = true
       ws.on('pong', () => (ws.isAlive = true))
@@ -117,14 +125,18 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       const buffered: Uint8Array[] = []
       const buffer = (data: Buffer) => buffered.push(new Uint8Array(data))
       ws.on('message', buffer)
-      getRoom(name).then(
+      const room = readOnly
+        ? resolveView(options.persistence, id).then((name) => (name ? getRoom(name) : null))
+        : getRoom(id)
+      room.then(
         (room) => {
           ws.off('message', buffer)
+          if (!room) return ws.close(4404, 'unknown view link')
           if (ws.readyState !== ws.OPEN) return scheduleUnload(room)
-          room.connect(ws, buffered)
+          room.connect(ws, buffered, readOnly)
         },
         (error: unknown) => {
-          logger.error('room load failed', { room: name, error: String(error) })
+          logger.error('room load failed', { id, error: String(error) })
           ws.close(1011, 'room unavailable')
         },
       )
