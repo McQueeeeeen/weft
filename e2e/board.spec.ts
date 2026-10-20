@@ -2,7 +2,9 @@ import { expect, test, type Browser, type Page } from '@playwright/test'
 
 const summary = (page: Page) => page.getByTestId('board-summary')
 
-async function openBoard(browser: Browser, path: string): Promise<Page> {
+const newBoard = () => `/b/e2e${Math.random().toString(36).slice(2, 10)}`
+
+async function openBoard(browser: Browser, path = newBoard()): Promise<Page> {
   const page = await (await browser.newContext()).newPage()
   await page.goto(path)
   await expect(page.locator('.connection[data-state="online"]')).toBeVisible()
@@ -18,7 +20,7 @@ async function drawRect(page: Page, from: [number, number], to: [number, number]
 }
 
 test('edits made in one browser appear in another', async ({ browser }) => {
-  const alice = await openBoard(browser, '/')
+  const alice = await openBoard(browser)
   const bob = await openBoard(browser, new URL(alice.url()).pathname)
 
   await drawRect(alice, [300, 300], [500, 420])
@@ -35,13 +37,13 @@ test('edits made in one browser appear in another', async ({ browser }) => {
 })
 
 test('shows who else is on the board', async ({ browser }) => {
-  const alice = await openBoard(browser, '/')
+  const alice = await openBoard(browser)
   await openBoard(browser, new URL(alice.url()).pathname)
   await expect(alice.getByRole('group', { name: '2 people on this board' })).toBeVisible()
 })
 
 test('undo only reverts your own changes', async ({ browser }) => {
-  const alice = await openBoard(browser, '/')
+  const alice = await openBoard(browser)
   const bob = await openBoard(browser, new URL(alice.url()).pathname)
 
   await drawRect(alice, [400, 200], [500, 300])
@@ -58,7 +60,7 @@ test('undo only reverts your own changes', async ({ browser }) => {
 })
 
 test('keeps the board after a reload', async ({ browser }) => {
-  const page = await openBoard(browser, '/')
+  const page = await openBoard(browser)
   await drawRect(page, [300, 300], [400, 400])
   await expect(summary(page)).toHaveText(/^1 object/)
   await page.reload()
@@ -66,7 +68,7 @@ test('keeps the board after a reload', async ({ browser }) => {
 })
 
 test('opens the shortcut list from the keyboard', async ({ browser }) => {
-  const page = await openBoard(browser, '/')
+  const page = await openBoard(browser)
   await page.keyboard.press('?')
   const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' })
   await expect(dialog).toBeVisible()
@@ -75,8 +77,16 @@ test('opens the shortcut list from the keyboard', async ({ browser }) => {
 })
 
 test('fills an empty board from the sample', async ({ browser }) => {
-  const page = await openBoard(browser, '/')
+  const page = await openBoard(browser)
   await page.getByRole('button', { name: 'Start from a sample' }).click()
   await expect(summary(page)).toHaveText(/^6 objects/)
   await expect(page.getByRole('heading', { name: 'An empty board' })).toBeHidden()
+})
+
+test('the home page leads to a new board', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Draw together, in real time' })).toBeVisible()
+  await page.getByRole('link', { name: 'Open a board' }).first().click()
+  await expect(page).toHaveURL(/\/b\/[a-z0-9]+$/)
+  await expect(page.getByRole('heading', { name: 'An empty board' })).toBeVisible()
 })
