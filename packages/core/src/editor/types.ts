@@ -8,6 +8,7 @@ export const TOOLS = [
   'ellipse',
   'sticky',
   'text',
+  'frame',
   'arrow',
   'pen',
 ] as const
@@ -20,6 +21,7 @@ export const TOOL_SHORTCUTS: Record<string, ToolId> = {
   o: 'ellipse',
   s: 'sticky',
   t: 'text',
+  f: 'frame',
   a: 'arrow',
   p: 'pen',
 }

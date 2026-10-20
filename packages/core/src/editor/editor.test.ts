@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { worldToScreen } from '../camera.ts'
 import { arrowEndpoints } from '../model/geometry.ts'
+import { Board } from '../model/board.ts'
 import { createEditor, key, pointer, rect } from '../test-utils.ts'
+import { Editor } from './editor.ts'
 
 describe('Editor', () => {
   describe('creating shapes', () => {
@@ -422,6 +424,80 @@ describe('Editor', () => {
       editor.keyUp(key(' '))
       expect(editor.camera.x).not.toBe(before.x)
       expect(editor.board.all()[0]).toMatchObject({ x: 0 })
+    })
+  })
+
+  describe('frames', () => {
+    it('draws a frame behind existing content', () => {
+      const editor = createEditor()
+      const note = editor.board.create(rect(50, 50, 40, 40))
+      editor.setTool('frame')
+      pointer(editor).drag({ x: 0, y: 0 }, { x: 300, y: 200 })
+      const [first, second] = editor.board.all()
+      expect(first).toMatchObject({ type: 'frame', title: 'Frame 1', w: 300, h: 200 })
+      expect(second!.id).toBe(note)
+    })
+
+    it('moves the shapes inside a frame along with it', () => {
+      const editor = createEditor()
+      const inside = editor.board.create(rect(50, 50, 40, 40))
+      const outside = editor.board.create(rect(500, 50, 40, 40))
+      const frame = editor.board.create({
+        type: 'frame',
+        x: 0,
+        y: 0,
+        w: 300,
+        h: 200,
+        title: 'A',
+        color: 'ink',
+      })
+      pointer(editor).drag({ x: 20, y: -10 }, { x: 120, y: -10 })
+      expect(editor.board.get(frame)).toMatchObject({ x: 100 })
+      expect(editor.board.get(inside)).toMatchObject({ x: 150 })
+      expect(editor.board.get(outside)).toMatchObject({ x: 500 })
+    })
+
+    it('renames a frame by double-clicking its title', () => {
+      const editor = createEditor()
+      const frame = editor.board.create({
+        type: 'frame',
+        x: 0,
+        y: 0,
+        w: 300,
+        h: 200,
+        title: 'A',
+        color: 'ink',
+      })
+      pointer(editor).dblclick(20, -10)
+      expect(editor.editingId).toBe(frame)
+      editor.updateText(frame, 'Backlog')
+      expect(editor.board.get(frame)).toMatchObject({ title: 'Backlog' })
+    })
+  })
+
+  describe('read-only', () => {
+    it('allows looking around but never changes the document', () => {
+      const board = new Board()
+      const id = board.create(rect(0, 0, 100, 100))
+      const editor = new Editor({ board, readOnly: true })
+      editor.setViewport(1000, 800)
+      const p = pointer(editor)
+
+      editor.setTool('rect')
+      expect(editor.tool).toBe('select')
+      p.click(50, 50)
+      expect(editor.selection).toEqual([id])
+      expect(editor.handles()).toEqual([])
+      p.drag({ x: 50, y: 50 }, { x: 250, y: 250 })
+      editor.keyDown(key('Delete'))
+      editor.keyDown(key('ArrowRight'))
+      p.dblclick(400, 400)
+      expect(editor.paste(editor.copy()!)).toBe(false)
+      expect(board.size).toBe(1)
+      expect(board.get(id)).toMatchObject({ x: 0, y: 0 })
+
+      editor.setTool('hand')
+      expect(editor.tool).toBe('hand')
     })
   })
 })

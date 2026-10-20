@@ -71,6 +71,7 @@ const HIT_TOLERANCE = { fine: 4, coarse: 12 }
 const HANDLE_RADIUS = { fine: 8, coarse: 18 }
 
 const DEFAULT_BOX = { w: 160, h: 100 }
+const DEFAULT_FRAME = { w: 640, h: 420 }
 const PEN_FLUSH_MS = 32
 const NUDGE = 1
 const NUDGE_LARGE = 10
@@ -81,6 +82,7 @@ export interface EditorOptions {
   readonly board: Board
   readonly presence?: Presence | null
   readonly now?: () => number
+  readonly readOnly?: boolean
 }
 
 export class Editor {
@@ -109,7 +111,10 @@ export class Editor {
   private readonly listeners = new Set<() => void>()
   private readonly disposers: (() => void)[] = []
 
-  constructor({ board, presence = null, now = Date.now }: EditorOptions) {
+  readonly readOnly: boolean
+
+  constructor({ board, presence = null, now = Date.now, readOnly = false }: EditorOptions) {
+    this.readOnly = readOnly
     this.board = board
     this.presence = presence
     this.now = now
@@ -184,7 +189,7 @@ export class Editor {
   }
 
   handles(): HandlePosition[] {
-    if (this._tool !== 'select' || this._editing !== null) return []
+    if (this.readOnly || this._tool !== 'select' || this._editing !== null) return []
     const kind = this.gesture.kind
     if (kind === 'translating' || kind === 'marquee') return []
     return selectionHandles(
@@ -230,7 +235,7 @@ export class Editor {
   }
 
   setTool(tool: ToolId): void {
-    if (this._tool === tool) return
+    if (this._tool === tool || (this.readOnly && tool !== 'select' && tool !== 'hand')) return
     this.cancel()
     this.stopEditing()
     this._tool = tool
@@ -256,6 +261,7 @@ export class Editor {
   }
 
   setStyle(patch: Partial<Style>): void {
+    if (this.readOnly) return
     this._style = { ...this._style, ...patch }
     const selected = this.selectedShapes()
     if (selected.length > 0) {
@@ -269,42 +275,47 @@ export class Editor {
   }
 
   deleteSelected(): void {
-    if (this._selection.length === 0) return
+    if (this.readOnly || this._selection.length === 0) return
     this.history.stopCapturing()
     this.board.delete(this._selection)
     this.history.stopCapturing()
   }
 
   duplicateSelected(): void {
+    if (this.readOnly) return
     const text = this.copy()
     if (text) this.insertClipboard(text, { offset: { x: PASTE_OFFSET, y: PASTE_OFFSET } })
   }
 
   bringToFront(): void {
+    if (this.readOnly) return
     this.history.stopCapturing()
     this.board.bringToFront(this._selection)
   }
 
   sendToBack(): void {
+    if (this.readOnly) return
     this.history.stopCapturing()
     this.board.sendToBack(this._selection)
   }
 
   nudge(dx: number, dy: number): void {
     const selected = this.selectedShapes()
-    if (selected.length === 0) return
+    if (this.readOnly || selected.length === 0) return
     this.board.transact(() => {
       for (const shape of selected) this.board.update(shape.id, translatePatch(shape, dx, dy))
     })
   }
 
   undo(): void {
+    if (this.readOnly) return
     this.cancel()
     this.stopEditing()
     this.history.undo()
   }
 
   redo(): void {
+    if (this.readOnly) return
     this.cancel()
     this.stopEditing()
     this.history.redo()
@@ -336,7 +347,7 @@ export class Editor {
 
   startEditing(id: string): void {
     const shape = this.board.get(id)
-    if (!shape || !hasText(shape)) return
+    if (this.readOnly || !shape || !(hasText(shape) || shape.type === 'frame')) return
     this.history.stopCapturing()
     this._tool = 'select'
     this._editing = id
@@ -345,6 +356,8 @@ export class Editor {
   }
 
   updateText(id: string, text: string, size?: { w: number; h: number }): void {
+    if (this.readOnly) return
+    if (this.board.get(id)?.type === 'frame') return this.board.update(id, { title: text })
     this.board.update(id, { text, ...size })
   }
 
@@ -375,6 +388,7 @@ export class Editor {
   }
 
   paste(text: string, at?: Vec): boolean {
+    if (this.readOnly) return false
     this.pasteCount++
     const placement = at
       ? { center: this.screenToWorld(at) }
@@ -405,6 +419,21 @@ export class Editor {
     switch (this._tool) {
       case 'select':
         return this.selectPointerDown(e, world)
+      case 'frame': {
+        const count = this.board.all().filter((s) => s.type === 'frame').length
+        const id = this.board.create({
+          type: 'frame',
+          x: world.x,
+          y: world.y,
+          w: 0,
+          h: 0,
+          title: `Frame ${count + 1}`,
+          color: 'ink',
+        })
+        this.select([id])
+        this.gesture = { kind: 'creating', id, startWorld: world }
+        return this.changed()
+      }
       case 'rect':
       case 'ellipse': {
         const { color, fill, size } = this._style
@@ -499,12 +528,12 @@ export class Editor {
         return this.changed()
       }
       case 'pointing-shape': {
-        if (!this.pastThreshold(g.startScreen, e.point)) return
+        if (this.readOnly || !this.pastThreshold(g.startScreen, e.point)) return
         if (g.duplicate) this.duplicateInPlace()
         this.gesture = {
           kind: 'translating',
           startWorld: g.startWorld,
-          origins: this.selectedShapes(),
+          origins: this.withFrameContents(this.selectedShapes()),
         }
         this._cursor = 'move'
         return this.pointerMove(e)
@@ -648,12 +677,14 @@ export class Editor {
         const shape = this.board.get(g.id)
         const minSize = DRAG_THRESHOLD.fine / this._camera.z
         if (shape && shape.type !== 'arrow' && shape.w < minSize && shape.h < minSize) {
+          const box = shape.type === 'frame' ? DEFAULT_FRAME : DEFAULT_BOX
           this.board.update(g.id, {
-            x: g.startWorld.x - DEFAULT_BOX.w / 2,
-            y: g.startWorld.y - DEFAULT_BOX.h / 2,
-            ...DEFAULT_BOX,
+            x: g.startWorld.x - box.w / 2,
+            y: g.startWorld.y - box.h / 2,
+            ...box,
           })
         }
+        if (shape?.type === 'frame') this.board.sendToBack([g.id])
         this.history.stopCapturing()
         this._tool = 'select'
         this._cursor = 'default'
@@ -689,10 +720,10 @@ export class Editor {
   }
 
   doubleClick(e: PointerInput): void {
-    if (this._tool !== 'select') return
+    if (this.readOnly || this._tool !== 'select') return
     const world = this.screenToWorld(e.point)
     const hit = this.board.shapeAt(world, this.tolerance())
-    if (hit && hasText(hit)) return this.startEditing(hit.id)
+    if (hit && (hasText(hit) || hit.type === 'frame')) return this.startEditing(hit.id)
     if (!hit) this.createText(world)
   }
 
@@ -902,6 +933,21 @@ export class Editor {
       additive: e.shift,
     }
     this.changed()
+  }
+
+  private withFrameContents(shapes: Shape[]): Shape[] {
+    const ids = new Set(shapes.map((s) => s.id))
+    const result = [...shapes]
+    for (const frame of shapes) {
+      if (frame.type !== 'frame') continue
+      const box = boxOf(frame)
+      for (const inner of this.board.queryBox(box)) {
+        if (ids.has(inner.id) || !boxContainsBox(box, this.frameOf(inner))) continue
+        ids.add(inner.id)
+        result.push(inner)
+      }
+    }
+    return result
   }
 
   private createText(world: Vec): void {
