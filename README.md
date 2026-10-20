@@ -1,5 +1,7 @@
 # Weft
 
+**Live demo: [weft-vcbs.onrender.com](https://weft-vcbs.onrender.com)** (free instance, the first visit after a quiet spell takes about 30 seconds to wake it, and boards reset on redeploy)
+
 A multiplayer whiteboard. Open a board, send the link, and draw, write and connect ideas
 together in real time. Boards keep working offline and merge when the connection returns.
 
