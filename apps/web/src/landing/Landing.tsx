@@ -7,6 +7,7 @@ import {
 import type { ReactNode } from 'react'
 import { newBoardUrl } from '../app/routing.ts'
 import { useTheme } from '../app/theme.ts'
+import { Logo } from '../ui/Logo.tsx'
 
 const SOURCE_URL = 'https://github.com/McQueeeeeen/weft'
 
@@ -52,7 +53,7 @@ export function Landing() {
   return (
     <div className="landing">
       <header className="landing-nav">
-        <span className="wordmark">weft</span>
+        <Logo />
         <nav aria-label="Primary">
           <a className="nav-link" href={SOURCE_URL}>
             <GithubLogoIcon />

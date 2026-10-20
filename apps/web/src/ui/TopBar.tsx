@@ -5,6 +5,7 @@ import { usePeople } from '../app/hooks.ts'
 import { thread } from '../canvas/palette.ts'
 import { initials } from '../collab/identity.ts'
 import type { Session, SessionStatus } from '../collab/session.ts'
+import { Logo } from './Logo.tsx'
 
 const MAX_AVATARS = 4
 
@@ -24,7 +25,7 @@ export function TopBar({ session, onRename, onShare, menu }: TopBarProps) {
   return (
     <>
       <header className="brand panel">
-        <span className="wordmark">weft</span>
+        <Logo />
         <ConnectionLabel status={status} />
       </header>
       <div className="top-actions">

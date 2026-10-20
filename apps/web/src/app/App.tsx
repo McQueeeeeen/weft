@@ -55,7 +55,8 @@ export function App({ session }: { session: Session }) {
 
   const fitted = useRef(false)
   useEffect(() => {
-    if (fitted.current || !status.loaded || editor.board.size === 0) return
+    if (fitted.current || !status.loaded || editor.board.size === 0 || editor.history.canUndo)
+      return
     fitted.current = true
     editor.zoomToFit()
   }, [status.loaded, status.synced, editor])

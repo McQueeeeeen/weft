@@ -179,16 +179,34 @@ kbd {
   padding: 0 16px 0 18px;
 }
 
-.wordmark {
-  font-size: 22px;
-  font-weight: 750;
-  letter-spacing: -0.035em;
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-mark {
+  width: 32px;
+  height: 17px;
+}
+
+.logo-warp {
+  fill: var(--ink);
+}
+
+.logo-weft {
+  fill: none;
+  stroke: var(--thread);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+}
+
+.logo-word {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
   line-height: 1;
-  padding: 2px 9px 4px;
-  margin-left: -7px;
-  background: linear-gradient(var(--thread), var(--thread)) 0 60% / 100% 3px no-repeat;
-  -webkit-text-stroke: 4px var(--surface);
-  paint-order: stroke fill;
+  padding-bottom: 2px;
 }
 
 .connection {
@@ -876,10 +894,6 @@ kbd {
   align-items: center;
   justify-content: space-between;
   height: 72px;
-}
-
-.landing-nav .wordmark {
-  -webkit-text-stroke-color: var(--board);
 }
 
 .landing-nav nav {

@@ -36,8 +36,13 @@ Content colors (ink, red, orange, yellow, green, blue, violet) are per-theme and
 ## Type
 
 Onest, one variable family for chrome and board text. It has full Cyrillic, so notes
-written in Russian render in the same face. The wordmark is Onest at weight 750 with a
-thread line running through the letters in the viewer's own color.
+written in Russian render in the same face.
+
+## Logo
+
+A weave seen in cross-section: four warp threads as ink dots, and one weft thread passing
+over, under, over and under them in the viewer's own color. The word "weft" sits beside it
+in Onest 700. The favicon uses the same mark in Cobalt.
 
 ## Board surface
 
