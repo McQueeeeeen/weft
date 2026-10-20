@@ -1,4 +1,5 @@
 import type { Awareness } from 'y-protocols/awareness'
+import type { Box } from './geometry/box.ts'
 import type { Vec } from './geometry/vec.ts'
 
 export interface PresenceUser {
@@ -10,6 +11,7 @@ export interface PresenceState {
   readonly user: PresenceUser
   readonly cursor: Vec | null
   readonly selection: readonly string[]
+  readonly view: Box | null
 }
 
 export interface Peer extends PresenceState {
@@ -23,16 +25,21 @@ const CURSOR_INTERVAL_MS = 40
 
 export class Presence {
   private peerCache: Peer[] | null = null
-  private pendingCursor: Vec | null | undefined
-  private cursorTimer: ReturnType<typeof setTimeout> | null = null
-  private lastCursorSent = 0
+  private pending: Partial<Pick<PresenceState, 'cursor' | 'view'>> = {}
+  private timer: ReturnType<typeof setTimeout> | null = null
+  private lastSent = 0
   private readonly listeners = new Set<() => void>()
 
   readonly awareness: Awareness
 
   constructor(awareness: Awareness, user: PresenceUser) {
     this.awareness = awareness
-    awareness.setLocalState({ user, cursor: null, selection: [] } satisfies PresenceState)
+    awareness.setLocalState({
+      user,
+      cursor: null,
+      selection: [],
+      view: null,
+    } satisfies PresenceState)
     awareness.on('change', this.onChange)
   }
 
@@ -58,16 +65,22 @@ export class Presence {
   }
 
   setCursor(cursor: Vec | null): void {
-    this.pendingCursor = cursor
-    if (this.cursorTimer !== null) return
-    const wait = Math.max(0, this.lastCursorSent + CURSOR_INTERVAL_MS - Date.now())
-    this.cursorTimer = setTimeout(() => {
-      this.cursorTimer = null
-      this.lastCursorSent = Date.now()
-      if (this.pendingCursor !== undefined) {
-        this.awareness.setLocalStateField('cursor', this.pendingCursor)
-        this.pendingCursor = undefined
-      }
+    this.queue({ cursor })
+  }
+
+  setView(view: Box | null): void {
+    this.queue({ view })
+  }
+
+  private queue(patch: Partial<Pick<PresenceState, 'cursor' | 'view'>>): void {
+    this.pending = { ...this.pending, ...patch }
+    if (this.timer !== null) return
+    const wait = Math.max(0, this.lastSent + CURSOR_INTERVAL_MS - Date.now())
+    this.timer = setTimeout(() => {
+      this.timer = null
+      this.lastSent = Date.now()
+      this.awareness.setLocalState({ ...this.localState(), ...this.pending })
+      this.pending = {}
     }, wait)
   }
 
@@ -89,7 +102,7 @@ export class Presence {
   }
 
   destroy(): void {
-    if (this.cursorTimer !== null) clearTimeout(this.cursorTimer)
+    if (this.timer !== null) clearTimeout(this.timer)
     this.awareness.off('change', this.onChange)
     this.listeners.clear()
   }
@@ -106,7 +119,7 @@ export class Presence {
 
 export function parsePresence(state: unknown): PresenceState | null {
   if (typeof state !== 'object' || state === null) return null
-  const { user, cursor, selection } = state as Record<string, unknown>
+  const { user, cursor, selection, view } = state as Record<string, unknown>
   if (typeof user !== 'object' || user === null) return null
   const { name, color } = user as Record<string, unknown>
   if (typeof name !== 'string' || typeof color !== 'number' || !Number.isInteger(color)) return null
@@ -117,6 +130,11 @@ export function parsePresence(state: unknown): PresenceState | null {
       Number.isFinite((cursor as Vec).y))
   if (!validCursor) return null
   if (!Array.isArray(selection) || !selection.every((id) => typeof id === 'string')) return null
+  const box = view as Box | null | undefined
+  const validView =
+    box === null ||
+    box === undefined ||
+    [box.minX, box.minY, box.maxX, box.maxY].every((n) => Number.isFinite(n))
   return {
     user: {
       name: name.slice(0, MAX_NAME_LENGTH),
@@ -124,5 +142,6 @@ export function parsePresence(state: unknown): PresenceState | null {
     },
     cursor: cursor as Vec | null,
     selection: selection,
+    view: validView ? (box ?? null) : null,
   }
 }

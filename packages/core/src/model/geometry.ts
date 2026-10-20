@@ -17,7 +17,10 @@ import {
 } from '../geometry/intersect.ts'
 import type { Vec } from '../geometry/vec.ts'
 import {
+  FRAME_TITLE_GAP,
+  FRAME_TITLE_SIZE,
   STROKE_WIDTH,
+  type FrameShape,
   type ArrowShape,
   type BoxShape,
   type Shape,
@@ -74,8 +77,17 @@ export function shapeBounds(shape: Shape, lookup: ShapeLookup): Box {
       return boxExpand(boxOf(shape), STROKE_WIDTH[shape.size] / 2)
     case 'sticky':
     case 'text':
+    case 'image':
       return boxOf(shape)
+    case 'frame':
+      return { ...boxOf(shape), minY: shape.y - frameTitleHeight() }
   }
+}
+
+export const frameTitleHeight = () => FRAME_TITLE_SIZE * 1.4 + FRAME_TITLE_GAP
+
+export function frameTitleBox(frame: FrameShape): Box {
+  return boxFromRect(frame.x, frame.y - frameTitleHeight(), frame.w, frameTitleHeight())
 }
 
 export function hitTestShape(
@@ -88,7 +100,16 @@ export function hitTestShape(
     case 'sticky':
     case 'text':
     case 'rect':
+    case 'image':
       return boxContainsPoint(boxExpand(boxOf(shape), tolerance), p)
+    case 'frame': {
+      const box = boxOf(shape)
+      if (boxContainsPoint(frameTitleBox(shape), p)) return true
+      return (
+        boxContainsPoint(boxExpand(box, tolerance), p) &&
+        !boxContainsPoint(boxExpand(box, -tolerance), p)
+      )
+    }
     case 'ellipse':
       return pointInEllipse(p, boxExpand(boxOf(shape), tolerance))
     case 'arrow': {
@@ -146,6 +167,8 @@ export function resizePatch(shape: Shape, from: Box, to: Box): ShapePatch {
     case 'ellipse':
     case 'sticky':
     case 'text':
+    case 'image':
+    case 'frame':
       return normalizedBox(
         mapX(shape.x),
         mapY(shape.y),

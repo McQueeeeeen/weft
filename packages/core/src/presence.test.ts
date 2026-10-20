@@ -48,6 +48,14 @@ describe('Presence', () => {
     expect(bob.peers()[0]!.cursor).toEqual({ x: 200, y: 200 })
   })
 
+  it('shares the viewport for follow mode', () => {
+    const { alice, bob } = pair()
+    alice.setView({ minX: 0, minY: 0, maxX: 800, maxY: 600 })
+    alice.setCursor({ x: 5, y: 5 })
+    vi.advanceTimersByTime(50)
+    expect(bob.peers()[0]).toMatchObject({ view: { maxX: 800 }, cursor: { x: 5 } })
+  })
+
   it('trims names', () => {
     const { alice, bob } = pair()
     alice.setUser({ name: `  ${'A'.repeat(100)}  `, color: 3 })

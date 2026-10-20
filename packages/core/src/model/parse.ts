@@ -1,4 +1,4 @@
-import { COLORS, FILLS, SIZES, type Shape } from './shapes.ts'
+import { ASSET_SRC, COLORS, FILLS, SIZES, type Shape } from './shapes.ts'
 
 export function parseShape(id: string, raw: unknown): Shape | null {
   if (!isRecord(raw)) return null
@@ -19,6 +19,16 @@ export function parseShape(id: string, raw: unknown): Shape | null {
       const box = parseBox(raw)
       if (!box || typeof raw.text !== 'string') return null
       return { ...base, ...box, type: 'sticky', text: raw.text }
+    }
+    case 'image': {
+      const box = parseBox(raw)
+      if (!box || typeof raw.src !== 'string' || !ASSET_SRC.test(raw.src)) return null
+      return { ...base, ...box, type: 'image', src: raw.src }
+    }
+    case 'frame': {
+      const box = parseBox(raw)
+      if (!box || typeof raw.title !== 'string') return null
+      return { ...base, ...box, type: 'frame', title: raw.title.slice(0, 120) }
     }
     case 'text': {
       const box = parseBox(raw)

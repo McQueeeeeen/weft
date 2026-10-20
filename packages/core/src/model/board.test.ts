@@ -154,4 +154,69 @@ describe('Board', () => {
       expect(board.arrowsBoundTo(to).size).toBe(0)
     })
   })
+
+  describe('images and frames', () => {
+    const src = `/assets/${'a'.repeat(64)}.png`
+
+    it('accepts uploaded images and rejects foreign sources', () => {
+      const doc = new Y.Doc()
+      const board = new Board(doc)
+      const ok = board.create({ type: 'image', x: 0, y: 0, w: 10, h: 10, src, color: 'ink' })
+      doc.transact(() => {
+        const root = doc.getMap<Y.Map<unknown>>('shapes')
+        root.set(
+          'bad',
+          new Y.Map(
+            Object.entries({
+              type: 'image',
+              x: 0,
+              y: 0,
+              w: 1,
+              h: 1,
+              color: 'ink',
+              index: 'a9',
+              src: 'https://evil.example/x.png',
+            }),
+          ),
+        )
+      })
+      expect(board.all().map((s) => s.id)).toEqual([ok])
+    })
+
+    it('selects a frame by its title or border, not its empty inside', () => {
+      const board = new Board()
+      const id = board.create({
+        type: 'frame',
+        x: 0,
+        y: 0,
+        w: 400,
+        h: 300,
+        title: 'Sprint',
+        color: 'ink',
+      })
+      expect(board.shapeAt({ x: 20, y: -10 }, 2)?.id).toBe(id)
+      expect(board.shapeAt({ x: 399, y: 150 }, 2)?.id).toBe(id)
+      expect(board.shapeAt({ x: 200, y: 150 }, 2)).toBeUndefined()
+    })
+  })
+
+  it('replaces the whole board in one undoable transaction', () => {
+    const board = new Board()
+    const keep = board.create(rect(0, 0, 10, 10))
+    const drop = board.create(rect(20, 0, 10, 10))
+    const snapshot = board
+      .all()
+      .map((s) => (s.id === keep ? { ...s, x: 99 } : s))
+      .filter((s) => s.id !== drop)
+    const added = new Board()
+    const extra = added.create(rect(50, 50, 5, 5))
+    board.replaceAll([...snapshot, added.get(extra)!])
+    expect(
+      board
+        .all()
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual([keep, extra].sort())
+    expect(board.get(keep)).toMatchObject({ x: 99 })
+  })
 })

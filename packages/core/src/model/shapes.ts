@@ -54,13 +54,31 @@ export interface ArrowShape extends ShapeBase {
   readonly size: Size
 }
 
+export interface ImageShape extends BoxShapeBase {
+  readonly type: 'image'
+  readonly src: string
+}
+
+export interface FrameShape extends BoxShapeBase {
+  readonly type: 'frame'
+  readonly title: string
+}
+
 export interface PenShape extends BoxShapeBase {
   readonly type: 'pen'
   readonly points: readonly number[]
   readonly size: Size
 }
 
-export type Shape = RectShape | EllipseShape | StickyShape | TextShape | ArrowShape | PenShape
+export type Shape =
+  | RectShape
+  | EllipseShape
+  | StickyShape
+  | TextShape
+  | ArrowShape
+  | PenShape
+  | ImageShape
+  | FrameShape
 export type BoxShape = Exclude<Shape, ArrowShape>
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
@@ -76,6 +94,10 @@ export const hasFill = (shape: Shape): shape is RectShape | EllipseShape =>
 
 export const hasText = (shape: Shape): shape is StickyShape | TextShape =>
   shape.type === 'sticky' || shape.type === 'text'
+
+export const ASSET_SRC = /^\/assets\/[a-f0-9]{64}\.(?:png|jpg|gif|webp)$/
+export const FRAME_TITLE_SIZE = 16
+export const FRAME_TITLE_GAP = 8
 
 export const STROKE_WIDTH: Record<Size, number> = { s: 2, m: 4, l: 8 }
 export const FONT_SIZE: Record<Size, number> = { s: 18, m: 28, l: 48 }

@@ -2,6 +2,8 @@ import { boxExpand, boxHeight, boxUnionAll, boxWidth } from '../geometry/box.ts'
 import { arrowEndpoints, shapeBounds, type ShapeLookup } from '../model/geometry.ts'
 import {
   FONT_SIZE,
+  FRAME_TITLE_GAP,
+  FRAME_TITLE_SIZE,
   STICKY_FONT_SIZE,
   STROKE_WIDTH,
   type ColorToken,
@@ -17,6 +19,7 @@ export interface SvgExportOptions {
   readonly fontFamily: string
   readonly wrapText: (text: string, maxWidth: number, fontSize: number) => string[]
   readonly padding?: number
+  readonly imageHref?: (src: string) => string
 }
 
 export const STICKY_PADDING = 16
@@ -93,6 +96,18 @@ function shapeToSvg(shape: Shape, lookup: ShapeLookup, o: SvgExportOptions): str
     }
     case 'pen':
       return `<path d="${penPathData(shape)}" fill="none" stroke="${attr(o.color(shape.color, 'stroke'))}" stroke-width="${STROKE_WIDTH[shape.size]}"/>`
+    case 'image': {
+      const href = attr(o.imageHref ? o.imageHref(shape.src) : shape.src)
+      return `<image href="${href}" x="${shape.x}" y="${shape.y}" width="${shape.w}" height="${shape.h}" preserveAspectRatio="none"/>`
+    }
+    case 'frame': {
+      const box = `<rect x="${shape.x}" y="${shape.y}" width="${shape.w}" height="${shape.h}" rx="6" fill="none" stroke="${attr(o.color(shape.color, 'stroke'))}" stroke-width="1"/>`
+      const top = shape.y - FRAME_TITLE_GAP - FRAME_TITLE_SIZE * LINE_HEIGHT
+      return (
+        box +
+        textBlock([shape.title], shape.x, top, FRAME_TITLE_SIZE, o.color(shape.color, 'stroke'))
+      )
+    }
   }
 }
 

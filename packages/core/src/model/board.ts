@@ -127,6 +127,14 @@ export class Board {
     })
   }
 
+  replaceAll(shapes: readonly Shape[]): void {
+    const keep = new Set(shapes.map((s) => s.id))
+    this.transact(() => {
+      for (const id of [...this.root.keys()]) if (!keep.has(id)) this.root.delete(id)
+      for (const shape of shapes) this.root.set(shape.id, toYMap({ ...shape }))
+    })
+  }
+
   delete(ids: Iterable<string>): void {
     const doomed = new Set(ids)
     this.transact(() => {
