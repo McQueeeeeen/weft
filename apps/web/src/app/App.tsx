@@ -1,5 +1,5 @@
 import type { PresenceUser } from '@weft/core'
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { boardToPng, boardToSvg, download } from '../canvas/export.ts'
 import { thread } from '../canvas/palette.ts'
 import type { Renderer } from '../canvas/renderer.ts'
@@ -52,6 +52,13 @@ export function App({ session }: { session: Session }) {
     const timer = setTimeout(() => setToast(null), TOAST_MS)
     return () => clearTimeout(timer)
   }, [toast])
+
+  const fitted = useRef(false)
+  useEffect(() => {
+    if (fitted.current || !status.loaded || editor.board.size === 0) return
+    fitted.current = true
+    editor.zoomToFit()
+  }, [status.loaded, status.synced, editor])
 
   const openShortcuts = useCallback(() => setDialog('shortcuts'), [])
 

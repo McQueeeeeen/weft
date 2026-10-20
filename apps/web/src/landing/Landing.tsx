@@ -1,7 +1,7 @@
 import {
   ArrowCounterClockwiseIcon,
   GithubLogoIcon,
-  LightningIcon,
+  GaugeIcon,
   WifiSlashIcon,
 } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
@@ -113,7 +113,7 @@ export function Landing() {
                 Boards are kept in the browser and merge with the server when the connection
                 returns.
               </Fact>
-              <Fact icon={<LightningIcon />} title="Fast with thousands of shapes">
+              <Fact icon={<GaugeIcon />} title="Fast with thousands of shapes">
                 A spatial index finds what is on screen in 9 µs among 10,000 shapes, about 20 times
                 faster than a scan.
               </Fact>
