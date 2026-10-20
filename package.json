@@ -10,7 +10,7 @@
     "dev": "pnpm --parallel --filter @weft/server --filter @weft/web dev",
     "build": "pnpm --filter @weft/web build",
     "start": "pnpm --filter @weft/server start",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json && tsc -p e2e",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

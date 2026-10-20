@@ -1,0 +1,11 @@
+services:
+  weft:
+    build: .
+    ports:
+      - '8080:8080'
+    volumes:
+      - boards:/data
+    restart: unless-stopped
+
+volumes:
+  boards:
