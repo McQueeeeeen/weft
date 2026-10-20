@@ -12,7 +12,6 @@ import * as Y from 'yjs'
 import type { Logger } from './logger.ts'
 import type { Persistence } from './persistence.ts'
 
-/** Message types of the y-websocket wire protocol. */
 export const MESSAGE_SYNC = 0
 export const MESSAGE_AWARENESS = 1
 export const MESSAGE_QUERY_AWARENESS = 3
@@ -23,28 +22,17 @@ export interface RoomOptions {
   readonly name: string
   readonly persistence: Persistence
   readonly logger: Logger
-  /** Quiet period before a snapshot is written. */
   readonly saveDebounceMs: number
-  /** Upper bound on how stale the snapshot can get during continuous editing. */
   readonly saveMaxWaitMs: number
-  /** Called after a socket leaves; the owner decides whether to unload the room. */
   readonly onDisconnect?: (room: Room) => void
 }
 
-/**
- * One shared document and everyone connected to it.
- *
- * The server is a relay with memory: it merges every client's updates into its own
- * replica, so a client joining late (or reconnecting after being offline) syncs
- * against the server alone, and the replica is periodically snapshotted to disk.
- */
 export class Room {
   readonly name: string
   readonly doc = new Y.Doc()
   readonly awareness = new Awareness(this.doc)
 
   private readonly options: RoomOptions
-  /** Socket -> awareness client ids it controls, removed when the socket goes away. */
   private readonly connections = new Map<WebSocket, Set<number>>()
   private saveTimer: NodeJS.Timeout | null = null
   private firstUnsavedAt: number | null = null
@@ -53,7 +41,6 @@ export class Room {
   private constructor(options: RoomOptions) {
     this.options = options
     this.name = options.name
-    // The server has no presence of its own.
     this.awareness.setLocalState(null)
   }
 
@@ -70,7 +57,6 @@ export class Room {
     return this.connections.size
   }
 
-  /** Adds a socket and replays messages it sent while the room was loading. */
   connect(ws: WebSocket, buffered: readonly Uint8Array[] = []): void {
     this.connections.set(ws, new Set())
     ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => this.onMessage(ws, toBytes(data)))
@@ -86,7 +72,6 @@ export class Room {
     for (const message of buffered) this.onMessage(ws, message)
   }
 
-  /** Writes the snapshot now if there are unsaved changes. */
   flush(): Promise<void> {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer)
@@ -122,7 +107,6 @@ export class Room {
           const encoder = encoding.createEncoder()
           encoding.writeVarUint(encoder, MESSAGE_SYNC)
           syncProtocol.readSyncMessage(decoder, encoder, this.doc, ws)
-          // Only step 1 produces a reply (step 2); updates are broadcast via onDocUpdate.
           if (encoding.length(encoder) > 1) this.send(ws, encoding.toUint8Array(encoder))
           break
         }
@@ -136,7 +120,6 @@ export class Room {
           this.options.logger.debug('unknown message type', { room: this.name, type })
       }
     } catch (error) {
-      // A malformed message is a broken or hostile client; drop it, keep the room.
       this.options.logger.warn('rejected message', { room: this.name, error: String(error) })
       ws.close(1007, 'invalid message')
     }
@@ -179,7 +162,6 @@ export class Room {
     const controlled = this.connections.get(ws)
     if (!controlled) return
     this.connections.delete(ws)
-    // Tell everyone the person left now, instead of waiting for awareness to time out.
     removeAwarenessStates(this.awareness, [...controlled], null)
     this.options.onDisconnect?.(this)
   }

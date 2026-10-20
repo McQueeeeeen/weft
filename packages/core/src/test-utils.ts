@@ -22,7 +22,6 @@ export const rect = (
   size: 'm',
 })
 
-/** Two boards wired together the way the network provider would: every update is relayed. */
 export function connectedPair(): [Board, Board] {
   const a = new Y.Doc()
   const b = new Y.Doc()
@@ -35,7 +34,6 @@ export function connectedPair(): [Board, Board] {
   return [new Board(a), new Board(b)]
 }
 
-/** Two boards whose updates are held back until `sync()`; models concurrent offline edits. */
 export function partitionedPair(): { a: Board; b: Board; sync: () => void } {
   const a = new Board()
   const b = new Board()
@@ -63,7 +61,6 @@ type PointerOptions = Partial<Modifiers> & {
   pointerId?: number
 }
 
-/** Drives the editor with pointer input expressed in world coordinates. */
 export function pointer(editor: Editor) {
   const input = (world: Vec, o: PointerOptions = {}): PointerInput => ({
     point: worldToScreen(editor.camera, world),
@@ -79,7 +76,6 @@ export function pointer(editor: Editor) {
     move: (x: number, y: number, o?: PointerOptions) => editor.pointerMove(input({ x, y }, o)),
     up: (x: number, y: number, o?: PointerOptions) => editor.pointerUp(input({ x, y }, o)),
     dblclick: (x: number, y: number) => editor.doubleClick(input({ x, y })),
-    /** Press, move in a few steps, release. */
     drag(from: Vec, to: Vec, o?: PointerOptions) {
       this.down(from.x, from.y, o)
       for (const t of [0.25, 0.5, 0.75, 1]) {

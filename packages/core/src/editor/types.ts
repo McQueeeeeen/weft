@@ -44,12 +44,10 @@ export type CursorKind =
 export interface Modifiers {
   readonly shift: boolean
   readonly alt: boolean
-  /** Ctrl on Windows and Linux, Cmd on macOS. */
   readonly mod: boolean
 }
 
 export interface PointerInput extends Modifiers {
-  /** Screen coordinates relative to the board element. */
   readonly point: Vec
   readonly pointerId: number
   readonly pointerType: 'mouse' | 'pen' | 'touch'
@@ -60,7 +58,6 @@ export interface WheelInput {
   readonly point: Vec
   readonly deltaX: number
   readonly deltaY: number
-  /** Trackpad pinch arrives as a wheel event with ctrlKey set. */
   readonly mod: boolean
 }
 

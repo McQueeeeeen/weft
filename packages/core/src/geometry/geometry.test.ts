@@ -3,7 +3,6 @@ import { boxContainsBox, boxFromRect, boxIntersects, boxUnionAll } from './box.t
 import {
   clipToBoxOutline,
   clipToEllipseOutline,
-  distanceToEllipseOutline,
   distanceToSegment,
   moveToward,
   pointInEllipse,
@@ -60,11 +59,10 @@ describe('intersections', () => {
     expect(nx * nx + ny * ny).toBeCloseTo(1)
   })
 
-  it('tests ellipse membership and outline distance', () => {
+  it('tests ellipse membership', () => {
     const box = boxFromRect(0, 0, 100, 50)
     expect(pointInEllipse({ x: 50, y: 25 }, box)).toBe(true)
     expect(pointInEllipse({ x: 2, y: 2 }, box)).toBe(false)
-    expect(distanceToEllipseOutline({ x: 110, y: 25 }, box)).toBeCloseTo(10)
   })
 
   it('moves toward a point without overshooting', () => {

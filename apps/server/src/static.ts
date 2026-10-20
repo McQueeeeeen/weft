@@ -16,11 +16,6 @@ const MIME: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
 }
 
-/**
- * Minimal static file handler for the built web app, so one process serves the whole
- * product. Unknown paths fall back to index.html (client-side routing). Vite emits
- * content-hashed files under /assets, which are cached forever; index.html never is.
- */
 export function createStaticHandler(root: string) {
   const base = resolve(root)
 
@@ -28,7 +23,6 @@ export function createStaticHandler(root: string) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return false
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://local').pathname)
     const candidate = resolve(join(base, normalize(pathname)))
-    // Reject anything that escapes the root (../, encoded or not).
     if (candidate !== base && !candidate.startsWith(base + sep)) return false
 
     const file = (await isFile(candidate)) ? candidate : join(base, 'index.html')

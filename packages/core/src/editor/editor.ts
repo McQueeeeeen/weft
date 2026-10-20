@@ -66,7 +66,6 @@ type Gesture =
 
 const IDLE: Gesture = { kind: 'idle' }
 
-/** Screen-pixel distances, larger for touch where fingers are imprecise. */
 const DRAG_THRESHOLD = { fine: 3, coarse: 8 }
 const HIT_TOLERANCE = { fine: 4, coarse: 12 }
 const HANDLE_RADIUS = { fine: 8, coarse: 18 }
@@ -84,12 +83,6 @@ export interface EditorOptions {
   readonly now?: () => number
 }
 
-/**
- * The board engine. It owns view state (camera, tool, selection, gestures) and turns
- * normalized input into document edits. It knows nothing about the DOM: the web app
- * forwards pointer, wheel and key events and renders whatever state it exposes. That
- * split is what lets every interaction be tested in plain Node.
- */
 export class Editor {
   readonly board: Board
   readonly history: History
@@ -138,10 +131,6 @@ export class Editor {
     )
   }
 
-  // ---------------------------------------------------------------------------
-  // State
-
-  /** Increments on every observable change; a cheap snapshot for React. */
   get version(): number {
     return this._version
   }
@@ -166,7 +155,6 @@ export class Editor {
   get marquee(): Box | null {
     return this._marquee
   }
-  /** Shape an arrow end would attach to if released now. */
   get bindTarget(): string | null {
     return this._bindTarget
   }
@@ -181,7 +169,6 @@ export class Editor {
     return this._selection.map((id) => this.board.get(id)).filter((s): s is Shape => !!s)
   }
 
-  /** Style shown in the style panel: the first selected shape's, else the defaults for new shapes. */
   get style(): Style {
     const first = this.selectedShapes()[0]
     if (!first) return this._style
@@ -192,7 +179,6 @@ export class Editor {
     }
   }
 
-  /** Geometric frame of the selection (no stroke padding); what resize handles wrap. */
   selectionFrame(): Box | null {
     return boxUnionAll(this.selectedShapes().map((s) => this.frameOf(s)))
   }
@@ -231,13 +217,9 @@ export class Editor {
     this.listeners.clear()
   }
 
-  // ---------------------------------------------------------------------------
-  // Commands
-
   setViewport(width: number, height: number): void {
     const first = this._viewport.width === 0 && this._viewport.height === 0
     this._viewport = { width, height }
-    // Start with the world origin in the middle of the screen.
     if (first) this._camera = { x: -width / 2, y: -height / 2, z: 1 }
     this.changed()
   }
@@ -362,7 +344,6 @@ export class Editor {
     this.changed()
   }
 
-  /** Live text updates while typing; peers see the text as it is written. */
   updateText(id: string, text: string, size?: { w: number; h: number }): void {
     this.board.update(id, { text, ...size })
   }
@@ -377,7 +358,6 @@ export class Editor {
     this.changed()
   }
 
-  /** Serialized selection for the system clipboard, or null when nothing is selected. */
   copy(): string | null {
     const selected = this.selectedShapes()
     if (selected.length === 0) return null
@@ -394,7 +374,6 @@ export class Editor {
     return text
   }
 
-  /** Pastes at `at` (screen) when given, otherwise slightly offset from the original. */
   paste(text: string, at?: Vec): boolean {
     this.pasteCount++
     const placement = at
@@ -402,9 +381,6 @@ export class Editor {
       : { offset: { x: PASTE_OFFSET * this.pasteCount, y: PASTE_OFFSET * this.pasteCount } }
     return this.insertClipboard(text, placement)
   }
-
-  // ---------------------------------------------------------------------------
-  // Input
 
   pointerDown(e: PointerInput): void {
     this.pointerType = e.pointerType
@@ -667,7 +643,6 @@ export class Editor {
         const shape = this.board.get(g.id)
         const minSize = DRAG_THRESHOLD.fine / this._camera.z
         if (shape && shape.type !== 'arrow' && shape.w < minSize && shape.h < minSize) {
-          // A click without a drag places a default-sized shape.
           this.board.update(g.id, {
             x: g.startWorld.x - DEFAULT_BOX.w / 2,
             y: g.startWorld.y - DEFAULT_BOX.h / 2,
@@ -716,7 +691,6 @@ export class Editor {
     if (!hit) this.createText(world)
   }
 
-  /** Aborts the current gesture and reverts what it changed. */
   cancel(): void {
     const g = this.gesture
     this.gesture = IDLE
@@ -756,7 +730,6 @@ export class Editor {
     this.changed()
   }
 
-  /** Returns true when the key was handled, so the caller can prevent the default action. */
   keyDown(e: KeyInput): boolean {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
     if (this._editing) {
@@ -866,9 +839,6 @@ export class Editor {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Internals
-
   private selectPointerDown(e: PointerInput, world: Vec): void {
     const handle = handleAt(this.handles(), e.point, HANDLE_RADIUS[this.precision()])
     if (handle === 'start' || handle === 'end') {
@@ -905,7 +875,6 @@ export class Editor {
       return this.changed()
     }
 
-    // Empty space inside a multi-selection frame still drags the selection.
     const frame = this._selection.length > 1 ? this.selectionFrame() : null
     if (frame && !e.shift && boxContainsPoint(frame, world)) {
       this.gesture = {
@@ -914,7 +883,6 @@ export class Editor {
         startWorld: world,
         id: this._selection[0]!,
         toggleOnUp: false,
-        // A click without a drag clears the selection, like a click on empty canvas.
         clearOnClick: true,
         duplicate: e.alt,
       }
@@ -947,7 +915,6 @@ export class Editor {
     this.startEditing(id)
   }
 
-  /** Re-creates the selection in place and selects the copies; the originals stay put. */
   private duplicateInPlace(): void {
     const text = this.copy()
     if (text) this.insertClipboard(text, { offset: { x: 0, y: 0 } })
@@ -980,7 +947,6 @@ export class Editor {
   }
 
   private startPinch(): void {
-    // A second finger turns whatever the first one started into a pinch.
     if (this.gesture.kind !== 'idle' && this.gesture.kind !== 'pinching') {
       const touches = new Map(this.touches)
       this.cancel()
@@ -1002,7 +968,6 @@ export class Editor {
     const [a, b] = [...this.touches.values()] as [Vec, Vec]
     const center = mid(a, b)
     const z = Math.min(8, Math.max(0.1, g.startZoom * (dist(a, b) / g.startDistance)))
-    // Keep the world point that started under the fingers under the fingers.
     this._camera = { x: g.anchorWorld.x - center.x / z, y: g.anchorWorld.y - center.y / z, z }
     this.changed()
   }
@@ -1077,7 +1042,6 @@ function stylePatch(shape: Shape, patch: Partial<Style>): ShapePatch {
   if (patch.size && 'size' in shape && patch.size !== shape.size) {
     out.size = patch.size
     if (shape.type === 'text') {
-      // Keep the box roughly matching the new font size until the text is re-measured.
       const k = FONT_SIZE[patch.size] / FONT_SIZE[shape.size]
       out.w = shape.w * k
       out.h = shape.h * k
@@ -1086,7 +1050,6 @@ function stylePatch(shape: Shape, patch: Partial<Style>): ShapePatch {
   return out
 }
 
-/** The geometric fields of a shape, used to restore it when a gesture is cancelled. */
 function geometryOf(shape: Shape): ShapePatch {
   switch (shape.type) {
     case 'arrow':

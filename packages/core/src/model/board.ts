@@ -12,7 +12,6 @@ export interface BoardChange {
   readonly added: ReadonlySet<string>
   readonly updated: ReadonlySet<string>
   readonly removed: ReadonlySet<string>
-  /** False when the change arrived from a peer. */
   readonly local: boolean
 }
 
@@ -20,27 +19,13 @@ type ShapeMap = Y.Map<unknown>
 
 const SHAPES_KEY = 'shapes'
 
-/**
- * The shared document, plus the derived state needed to render it fast.
- *
- * Storage: one Y.Map per shape inside a root Y.Map keyed by id. Keeping each shape's
- * fields separate means two people editing different properties of the same shape
- * (one drags it, another recolors it) both win, instead of last-writer-wins on the
- * whole object.
- *
- * Derived state (immutable shape snapshots, paint order, spatial index, arrow
- * bindings) is updated incrementally from Yjs events, so a remote edit to one shape
- * costs O(1) and never a full rebuild.
- */
 export class Board {
   readonly doc: Y.Doc
-  /** Transaction origin for edits made through this board. History tracks only these. */
   readonly origin: object = { source: 'board' }
 
   private readonly root: Y.Map<ShapeMap>
   private readonly shapes = new Map<string, Shape>()
   private readonly spatial = new SpatialIndex()
-  /** Target shape id -> ids of arrows attached to it. */
   private readonly bindings = new Map<string, Set<string>>()
   private order: string[] | null = null
   private rank = new Map<string, number>()
@@ -67,7 +52,6 @@ export class Board {
     return this.shapes.has(id)
   }
 
-  /** All shapes in paint order (bottom first). */
   all(): Shape[] {
     return this.ensureOrder().map((id) => this.shapes.get(id)!)
   }
@@ -85,12 +69,10 @@ export class Board {
     return boxUnionAll(boxes)
   }
 
-  /** Shapes whose bounds intersect `box`, in paint order. */
   queryBox(box: Box): Shape[] {
     return this.sortByPaintOrder(this.spatial.query(box)).map((id) => this.shapes.get(id)!)
   }
 
-  /** Top-most shape under `point`. */
   shapeAt(point: Vec, tolerance: number, accept?: (shape: Shape) => boolean): Shape | undefined {
     const probe = boxExpand(
       { minX: point.x, minY: point.y, maxX: point.x, maxY: point.y },
@@ -105,7 +87,6 @@ export class Board {
     return undefined
   }
 
-  /** Arrows attached to `id`. */
   arrowsBoundTo(id: string): ReadonlySet<string> {
     return this.bindings.get(id) ?? EMPTY_SET
   }
@@ -124,7 +105,6 @@ export class Board {
     return id
   }
 
-  /** Creates several shapes above everything else, preserving their relative order. */
   createMany(inputs: readonly (ShapeInput & { id?: string })[]): string[] {
     const keys = generateNKeysBetween(this.topIndex(), null, inputs.length)
     return this.transact(() =>
@@ -150,7 +130,6 @@ export class Board {
   delete(ids: Iterable<string>): void {
     const doomed = new Set(ids)
     this.transact(() => {
-      // Arrows that outlive their target keep pointing where they were drawn.
       for (const id of doomed) {
         for (const arrowId of this.arrowsBoundTo(id)) {
           if (doomed.has(arrowId)) continue
@@ -207,8 +186,6 @@ export class Board {
 
   private ensureOrder(): string[] {
     if (this.order) return this.order
-    // Two peers can generate the same key concurrently; the id breaks the tie
-    // identically on every client.
     this.order = [...this.shapes.values()]
       .sort((a, b) => compare(a.index, b.index) || compare(a.id, b.id))
       .map((s) => s.id)
@@ -256,7 +233,6 @@ export class Board {
       }
     }
 
-    // Arrows attached to anything that changed have moved too.
     for (const set of [added, updated, removed]) {
       for (const id of set) {
         for (const arrowId of this.arrowsBoundTo(id)) {
@@ -294,7 +270,6 @@ export class Board {
 
 const EMPTY_SET: ReadonlySet<string> = new Set()
 
-/** Plain code-unit comparison; fractional index keys are not locale-sensitive. */
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 function toYMap(record: Record<string, unknown>): ShapeMap {

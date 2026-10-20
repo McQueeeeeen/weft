@@ -7,7 +7,6 @@ import type { Persistence } from './persistence.ts'
 import { Room } from './room.ts'
 import { createStaticHandler } from './static.ts'
 
-/** Room ids appear in URLs and file names, so they are restricted to a safe alphabet. */
 export const ROOM_PATTERN = /^\/ws\/([A-Za-z0-9_-]{1,64})$/
 
 export interface ServerOptions {
@@ -15,14 +14,11 @@ export interface ServerOptions {
   readonly host?: string
   readonly persistence: Persistence
   readonly logger?: Logger
-  /** Directory with the built web app; omit to serve only the sync endpoint. */
   readonly staticDir?: string | null
   readonly saveDebounceMs?: number
   readonly saveMaxWaitMs?: number
-  /** How long an empty room stays in memory, so quick reconnects skip a reload. */
   readonly unloadDelayMs?: number
   readonly heartbeatMs?: number
-  /** Largest accepted WebSocket message in bytes. */
   readonly maxPayload?: number
 }
 
@@ -30,7 +26,6 @@ export interface RunningServer {
   readonly port: number
   readonly roomCount: number
   readonly connectionCount: number
-  /** Closes every socket, writes all snapshots and stops listening. */
   close(): Promise<void>
 }
 
@@ -58,7 +53,6 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         void (async () => {
           if (room.connectionCount > 0) return
           await room.flush()
-          // Someone may have joined while the snapshot was being written.
           if (room.connectionCount > 0) return
           rooms.delete(room.name)
           room.destroy()
@@ -120,7 +114,6 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
       ws.on('pong', () => (ws.isAlive = true))
       wss.emit('connection', ws, req)
 
-      // Messages can arrive before the room has loaded from disk; keep them.
       const buffered: Uint8Array[] = []
       const buffer = (data: Buffer) => buffered.push(new Uint8Array(data))
       ws.on('message', buffer)
@@ -138,7 +131,6 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     })
   })
 
-  // Drops connections that vanished without a close frame (sleeping laptops, dead NATs).
   const heartbeat = setInterval(() => {
     for (const client of wss.clients as Set<AliveSocket>) {
       if (client.isAlive === false) {

@@ -1,19 +1,9 @@
 import { boxIntersects, type Box } from '../geometry/box.ts'
 
-/** Shapes spanning more cells than this live in a flat list instead of the grid. */
 const MAX_CELLS_PER_ENTRY = 64
-/** Cell coordinates are packed into one number; this keeps them positive and collision-free. */
 const CELL_OFFSET = 2 ** 20
 const CELL_STRIDE = 2 ** 21
 
-/**
- * Uniform-grid spatial hash.
- *
- * Board content is mostly similar-sized objects spread over a large plane, which is
- * the case a uniform grid handles well: O(1) updates while dragging and queries
- * proportional to the viewport, not to the board. Oversized entries are kept aside so
- * a single huge shape cannot blow up the number of cells touched on every update.
- */
 export class SpatialIndex {
   private readonly cells = new Map<number, Set<string>>()
   private readonly entries = new Map<string, { box: Box; cells: number[] | null }>()
@@ -64,13 +54,11 @@ export class SpatialIndex {
     return this.entries.get(id)?.box
   }
 
-  /** Ids whose boxes intersect `box`. Order is unspecified. */
   query(box: Box): string[] {
     const result: string[] = []
     const [minCx, minCy, maxCx, maxCy] = this.cellRange(box)
     const cellCount = (maxCx - minCx + 1) * (maxCy - minCy + 1)
 
-    // Zoomed far out the query can cover more cells than there are entries.
     if (cellCount > this.entries.size) {
       for (const [id, entry] of this.entries) {
         if (boxIntersects(entry.box, box)) result.push(id)

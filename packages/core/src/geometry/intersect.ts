@@ -10,18 +10,6 @@ export function distanceToSegment(p: Vec, a: Vec, b: Vec): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
 }
 
-/** Distance from `p` to the outline of the ellipse inscribed in `b` (approximate, exact on axes). */
-export function distanceToEllipseOutline(p: Vec, b: Box): number {
-  const c = boxCenter(b)
-  const rx = boxWidth(b) / 2
-  const ry = boxHeight(b) / 2
-  if (rx === 0 || ry === 0)
-    return distanceToSegment(p, { x: b.minX, y: b.minY }, { x: b.maxX, y: b.maxY })
-  const angle = Math.atan2((p.y - c.y) * rx, (p.x - c.x) * ry)
-  const onOutline = { x: c.x + rx * Math.cos(angle), y: c.y + ry * Math.sin(angle) }
-  return dist(p, onOutline)
-}
-
 export function pointInEllipse(p: Vec, b: Box): boolean {
   const c = boxCenter(b)
   const rx = boxWidth(b) / 2
@@ -32,10 +20,6 @@ export function pointInEllipse(p: Vec, b: Box): boolean {
   return nx * nx + ny * ny <= 1
 }
 
-/**
- * Where a ray from the center of `b` toward `target` leaves the box outline.
- * Used to attach arrow ends to the edge of rectangles and stickies.
- */
 export function clipToBoxOutline(b: Box, target: Vec): Vec {
   const c = boxCenter(b)
   const dx = target.x - c.x
@@ -49,7 +33,6 @@ export function clipToBoxOutline(b: Box, target: Vec): Vec {
   return { x: c.x + dx * t, y: c.y + dy * t }
 }
 
-/** Where a ray from the center of the ellipse inscribed in `b` toward `target` meets the outline. */
 export function clipToEllipseOutline(b: Box, target: Vec): Vec {
   const c = boxCenter(b)
   const dx = target.x - c.x
@@ -61,7 +44,6 @@ export function clipToEllipseOutline(b: Box, target: Vec): Vec {
   return { x: c.x + dx * t, y: c.y + dy * t }
 }
 
-/** Moves `from` toward `to` by `amount`, never past `to`. */
 export function moveToward(from: Vec, to: Vec, amount: number): Vec {
   const d = dist(from, to)
   if (d === 0) return from

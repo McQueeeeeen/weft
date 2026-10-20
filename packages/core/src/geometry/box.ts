@@ -1,6 +1,5 @@
 import type { Vec } from './vec.ts'
 
-/** Axis-aligned bounding box in world units. Always normalized: min <= max. */
 export interface Box {
   readonly minX: number
   readonly minY: number

@@ -4,11 +4,6 @@ import { ARROWHEAD_SIZE } from '../model/geometry.ts'
 
 const r = (n: number) => Math.round(n * 100) / 100
 
-/**
- * SVG path data for a freehand stroke, smoothed with quadratic curves through the
- * midpoints of consecutive samples. The same string drives the canvas renderer
- * (via Path2D) and SVG export, so both always look identical.
- */
 export function penPathData(shape: Pick<PenShape, 'x' | 'y' | 'points'>): string {
   const { x, y, points } = shape
   const n = points.length / 2
@@ -28,7 +23,6 @@ export function penPathData(shape: Pick<PenShape, 'x' | 'y' | 'points'>): string
   return d
 }
 
-/** The two barbs of an arrowhead pointing at `end`. */
 export function arrowHead(start: Vec, end: Vec, strokeWidth: number): [Vec, Vec] {
   const angle = Math.atan2(end.y - start.y, end.x - start.x)
   const length = Math.min(

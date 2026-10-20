@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { boxFromRect, boxIntersects, type Box } from '../geometry/box.ts'
 import { SpatialIndex } from './spatial-index.ts'
 
-/** Small deterministic PRNG so failures are reproducible. */
 function mulberry32(seed: number) {
   return () => {
     seed |= 0

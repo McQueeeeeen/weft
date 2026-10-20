@@ -1,8 +1,3 @@
-/**
- * Ramer-Douglas-Peucker simplification over a flat [x0, y0, x1, y1, ...] array.
- * Freehand strokes arrive at pointer-event rate; most of those points are redundant
- * once the stroke is finished, and every point is synced to every peer.
- */
 export function simplifyPolyline(points: readonly number[], tolerance: number): number[] {
   const count = points.length / 2
   if (count <= 2) return points.slice()
@@ -12,7 +7,6 @@ export function simplifyPolyline(points: readonly number[], tolerance: number): 
   keep[count - 1] = 1
   const toleranceSq = tolerance * tolerance
 
-  // Iterative to avoid deep recursion on long strokes.
   const stack: [number, number][] = [[0, count - 1]]
   while (stack.length > 0) {
     const [first, last] = stack.pop()!

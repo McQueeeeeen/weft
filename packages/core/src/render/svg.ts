@@ -13,10 +13,8 @@ export type PaletteRole = 'stroke' | 'tint' | 'sticky' | 'stickyText'
 
 export interface SvgExportOptions {
   readonly color: (token: ColorToken, role: PaletteRole) => string
-  /** Null exports with a transparent background. */
   readonly background: string | null
   readonly fontFamily: string
-  /** Line breaking is a measuring concern, so the host supplies it. */
   readonly wrapText: (text: string, maxWidth: number, fontSize: number) => string[]
   readonly padding?: number
 }
@@ -24,7 +22,6 @@ export interface SvgExportOptions {
 export const STICKY_PADDING = 16
 export const LINE_HEIGHT = 1.3
 
-/** Standalone SVG document for `shapes` (given in paint order), or null if there is nothing to export. */
 export function exportSvg(
   shapes: readonly Shape[],
   lookup: ShapeLookup,

@@ -1,10 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-/**
- * Stores one binary Yjs snapshot per room. The snapshot is the full document state
- * (`Y.encodeStateAsUpdate`), so loading is a single `applyUpdate`.
- */
 export interface Persistence {
   load(room: string): Promise<Uint8Array | null>
   save(room: string, state: Uint8Array): Promise<void>
@@ -23,11 +19,6 @@ export class MemoryPersistence implements Persistence {
   }
 }
 
-/**
- * Snapshots on the local file system. Writes go to a temp file and are renamed into
- * place, so a crash mid-write never leaves a truncated document behind. Room names
- * are validated before they reach this class, so they are safe as file names.
- */
 export class FilePersistence implements Persistence {
   private readonly dir: string
   private ready: Promise<void> | null = null

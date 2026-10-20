@@ -9,7 +9,6 @@ export interface Logger {
   error(msg: string, fields?: Record<string, unknown>): void
 }
 
-/** JSON-lines logger: one object per line, ready for any log collector. */
 export function createLogger(
   minLevel: Level = 'info',
   write = (line: string) => process.stdout.write(line),

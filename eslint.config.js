@@ -12,7 +12,7 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: { allowDefaultProject: ['*.config.ts'] },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -27,6 +27,7 @@ export default tseslint.config(
         { considerDefaultExhaustiveForUnions: true },
       ],
       eqeqeq: ['error', 'always'],
+      'no-empty': ['error', { allowEmptyCatch: true }],
       'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },

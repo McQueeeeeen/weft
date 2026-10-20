@@ -12,14 +12,6 @@ interface StackItemEvent {
   stackItem: { meta: Map<string, unknown> }
 }
 
-/**
- * Per-user undo on a shared document.
- *
- * Y.UndoManager only tracks transactions whose origin is in `trackedOrigins`, so a
- * peer's concurrent edits are never undone by this client, and undoing our own edit
- * does not revert what others did on top of it. Each history entry also remembers
- * the selection from before the edit, so undo puts the user back where they were.
- */
 export class History {
   private readonly manager: Y.UndoManager
   private readonly listeners = new Set<() => void>()
@@ -70,7 +62,6 @@ export class History {
     this.manager.redo()
   }
 
-  /** Ends the current capture group, so the next edit starts a new undo step. */
   stopCapturing(): void {
     this.manager.stopCapturing()
   }

@@ -11,7 +11,6 @@ import {
 import {
   clipToBoxOutline,
   clipToEllipseOutline,
-  distanceToEllipseOutline,
   distanceToSegment,
   moveToward,
   pointInEllipse,
@@ -27,9 +26,7 @@ import {
 
 export type ShapeLookup = (id: string) => Shape | undefined
 
-/** Space between a bound arrow end and the outline it points at. */
 export const ARROW_GAP = 6
-/** Arrowhead length; bounds are padded by it so heads are never culled. */
 export const ARROWHEAD_SIZE = 14
 
 export const boxOf = (shape: BoxShape): Box => boxFromRect(shape.x, shape.y, shape.w, shape.h)
@@ -47,11 +44,6 @@ function clipToShapeOutline(shape: BoxShape, toward: Vec): Vec {
     : clipToBoxOutline(box, toward)
 }
 
-/**
- * Resolves where an arrow is actually drawn. A bound end follows its shape: it sits on
- * the shape outline, on the line toward the other end. The stored coordinates are only
- * used for unbound ends, or when the bound shape was deleted by a peer.
- */
 export function arrowEndpoints(arrow: ArrowShape, lookup: ShapeLookup): { start: Vec; end: Vec } {
   const startShape = boundTarget(arrow.start, lookup)
   const endShape = boundTarget(arrow.end, lookup)
@@ -86,7 +78,6 @@ export function shapeBounds(shape: Shape, lookup: ShapeLookup): Box {
   }
 }
 
-/** Precise hit test. `tolerance` is in world units, so callers scale it by zoom. */
 export function hitTestShape(
   shape: Shape,
   p: Vec,
@@ -96,17 +87,10 @@ export function hitTestShape(
   switch (shape.type) {
     case 'sticky':
     case 'text':
+    case 'rect':
       return boxContainsPoint(boxExpand(boxOf(shape), tolerance), p)
-    case 'rect': {
-      const box = boxOf(shape)
-      if (shape.fill !== 'none') return boxContainsPoint(boxExpand(box, tolerance), p)
-      return distanceToRectOutline(p, box) <= tolerance + STROKE_WIDTH[shape.size] / 2
-    }
-    case 'ellipse': {
-      const box = boxOf(shape)
-      if (shape.fill !== 'none' && pointInEllipse(p, box)) return true
-      return distanceToEllipseOutline(p, box) <= tolerance + STROKE_WIDTH[shape.size] / 2
-    }
+    case 'ellipse':
+      return pointInEllipse(p, boxExpand(boxOf(shape), tolerance))
     case 'arrow': {
       const { start, end } = arrowEndpoints(shape, lookup)
       return distanceToSegment(p, start, end) <= tolerance + STROKE_WIDTH[shape.size] / 2
@@ -127,19 +111,6 @@ export function hitTestShape(
   }
 }
 
-function distanceToRectOutline(p: Vec, b: Box): number {
-  const tl = { x: b.minX, y: b.minY }
-  const tr = { x: b.maxX, y: b.minY }
-  const br = { x: b.maxX, y: b.maxY }
-  const bl = { x: b.minX, y: b.maxY }
-  return Math.min(
-    distanceToSegment(p, tl, tr),
-    distanceToSegment(p, tr, br),
-    distanceToSegment(p, br, bl),
-    distanceToSegment(p, bl, tl),
-  )
-}
-
 export function translatePatch(shape: Shape, dx: number, dy: number): ShapePatch {
   if (shape.type === 'arrow') {
     return { x1: shape.x1 + dx, y1: shape.y1 + dy, x2: shape.x2 + dx, y2: shape.y2 + dy }
@@ -147,10 +118,6 @@ export function translatePatch(shape: Shape, dx: number, dy: number): ShapePatch
   return { x: shape.x + dx, y: shape.y + dy }
 }
 
-/**
- * Maps a shape from one reference box to another. Resizing a multi-selection is the
- * same transform applied to every member against the selection bounds.
- */
 export function resizePatch(shape: Shape, from: Box, to: Box): ShapePatch {
   const sx = boxWidth(from) === 0 ? 1 : boxWidth(to) / boxWidth(from)
   const sy = boxHeight(from) === 0 ? 1 : boxHeight(to) / boxHeight(from)

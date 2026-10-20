@@ -1,7 +1,3 @@
-/**
- * Micro-benchmarks for the hot paths of a drag frame and a render frame.
- * Run with `pnpm bench`. Numbers are machine-dependent; compare rows, not absolutes.
- */
 import { boxFromRect, boxIntersects, type Box } from '../src/geometry/box.ts'
 import { Board } from '../src/model/board.ts'
 import { SpatialIndex } from '../src/spatial/spatial-index.ts'

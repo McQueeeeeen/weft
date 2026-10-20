@@ -7,16 +7,14 @@ import type { CursorKind, Handle, ResizeHandle } from './types.ts'
 
 export interface HandlePosition {
   readonly handle: Handle
-  /** Screen coordinates. */
   readonly point: Vec
 }
 
 const RESIZE_HANDLES: readonly ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 
-/** Selection boxes smaller than this on screen only get corner handles. */
 const MIN_SIZE_FOR_EDGE_HANDLES = 40
 
-export function resizeHandlePositions(bounds: Box, cam: Camera): HandlePosition[] {
+function resizeHandlePositions(bounds: Box, cam: Camera): HandlePosition[] {
   const a = worldToScreen(cam, { x: bounds.minX, y: bounds.minY })
   const b = worldToScreen(cam, { x: bounds.maxX, y: bounds.maxY })
   const cx = (a.x + b.x) / 2
@@ -38,7 +36,6 @@ export function resizeHandlePositions(bounds: Box, cam: Camera): HandlePosition[
   }))
 }
 
-/** Handles for the current selection: arrow endpoints for a lone arrow, a resize frame otherwise. */
 export function selectionHandles(
   selected: readonly Shape[],
   bounds: Box | null,
@@ -94,10 +91,6 @@ export function cursorForHandle(handle: Handle): CursorKind {
   }
 }
 
-/**
- * New bounds while dragging a resize handle by (dx, dy) world units. With
- * `keepAspect`, the dominant axis drives the other one.
- */
 export function resizeBox(
   start: Box,
   handle: ResizeHandle,
@@ -142,7 +135,6 @@ export function resizeBox(
     }
   }
 
-  // Dragging past the opposite edge flips the box.
   return {
     minX: Math.min(minX, maxX),
     minY: Math.min(minY, maxY),

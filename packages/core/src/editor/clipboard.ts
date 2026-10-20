@@ -14,10 +14,6 @@ interface ClipboardPayload {
   shapes: Shape[]
 }
 
-/**
- * Serializes shapes for the system clipboard. Arrow ends are frozen to where they are
- * currently drawn, so an arrow pasted without its target still looks the same.
- */
 export function serializeShapes(shapes: readonly Shape[], lookup: ShapeLookup): string {
   const frozen = shapes.map((shape) => {
     if (shape.type !== 'arrow') return shape
@@ -28,11 +24,6 @@ export function serializeShapes(shapes: readonly Shape[], lookup: ShapeLookup): 
   return JSON.stringify(payload)
 }
 
-/**
- * Parses clipboard text into shapes ready to insert: fresh ids, arrow bindings
- * remapped inside the pasted group (and dropped when the target was not copied),
- * and the group moved so its center lands on `center`, or offset by `offset`.
- */
 export function deserializeShapes(
   text: string,
   placement: { center: Vec } | { offset: Vec },

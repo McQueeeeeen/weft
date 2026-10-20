@@ -1,10 +1,5 @@
 import { COLORS, FILLS, SIZES, type Shape } from './shapes.ts'
 
-/**
- * Remote peers are not trusted: a buggy or older client can write anything into the
- * shared document. Every record is validated when it is read, and invalid records are
- * skipped instead of crashing the renderer for everyone in the room.
- */
 export function parseShape(id: string, raw: unknown): Shape | null {
   if (!isRecord(raw)) return null
   const index = raw.index

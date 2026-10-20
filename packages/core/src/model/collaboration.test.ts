@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { connectedPair, partitionedPair, rect } from '../test-utils.ts'
 
-/**
- * Convergence guarantees the product relies on. Each test makes concurrent edits on
- * two replicas that cannot see each other, syncs them, and checks both agree.
- */
 describe('collaboration', () => {
   it('relays edits between connected replicas', () => {
     const [a, b] = connectedPair()

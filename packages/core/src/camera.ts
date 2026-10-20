@@ -1,7 +1,6 @@
 import { boxCenter, boxHeight, boxWidth, type Box } from './geometry/box.ts'
 import type { Vec } from './geometry/vec.ts'
 
-/** (x, y) is the world point shown at the top-left of the viewport; z is the zoom factor. */
 export interface Camera {
   readonly x: number
   readonly y: number
@@ -23,14 +22,12 @@ export const worldToScreen = (cam: Camera, p: Vec): Vec => ({
   y: (p.y - cam.y) * cam.z,
 })
 
-/** Changes zoom while keeping the world point under `anchor` (screen space) fixed. */
 export function zoomAt(cam: Camera, anchor: Vec, nextZoom: number): Camera {
   const z = clampZoom(nextZoom)
   const world = screenToWorld(cam, anchor)
   return { x: world.x - anchor.x / z, y: world.y - anchor.y / z, z }
 }
 
-/** Pans by a screen-space delta. */
 export const panBy = (cam: Camera, dx: number, dy: number): Camera => ({
   x: cam.x - dx / cam.z,
   y: cam.y - dy / cam.z,
@@ -44,7 +41,6 @@ export const viewportBox = (cam: Camera, width: number, height: number): Box => 
   maxY: cam.y + height / cam.z,
 })
 
-/** Camera that fits `box` in the viewport with `padding` screen pixels around it. */
 export function cameraToFit(
   box: Box,
   width: number,

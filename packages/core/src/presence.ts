@@ -3,13 +3,11 @@ import type { Vec } from './geometry/vec.ts'
 
 export interface PresenceUser {
   readonly name: string
-  /** Index into the presence palette, so every client renders the same person the same way. */
   readonly color: number
 }
 
 export interface PresenceState {
   readonly user: PresenceUser
-  /** World coordinates; null when the pointer is outside the board. */
   readonly cursor: Vec | null
   readonly selection: readonly string[]
 }
@@ -21,14 +19,8 @@ export interface Peer extends PresenceState {
 export const PRESENCE_COLOR_COUNT = 8
 export const MAX_NAME_LENGTH = 32
 
-/** Cursor updates are sent at most this often; awareness is broadcast to every peer. */
 const CURSOR_INTERVAL_MS = 40
 
-/**
- * Typed facade over Yjs awareness: who is here, where their pointer is and what they
- * have selected. Awareness is ephemeral (never persisted) and expires on its own when
- * a client disappears without saying goodbye.
- */
 export class Presence {
   private peerCache: Peer[] | null = null
   private pendingCursor: Vec | null | undefined
@@ -65,7 +57,6 @@ export class Presence {
     this.awareness.setLocalStateField('selection', [...ids])
   }
 
-  /** Throttled with a trailing call, so the final resting position is always sent. */
   setCursor(cursor: Vec | null): void {
     this.pendingCursor = cursor
     if (this.cursorTimer !== null) return
@@ -80,7 +71,6 @@ export class Presence {
     }, wait)
   }
 
-  /** Other people in the room with a well-formed state. */
   peers(): readonly Peer[] {
     if (this.peerCache) return this.peerCache
     const peers: Peer[] = []
