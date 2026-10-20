@@ -28,6 +28,12 @@ docker compose up --build
 
 - Rectangles, ellipses, sticky notes, text, freehand pen and arrows that stay attached to
   shapes as they move
+- Frames that group a section of the board and carry their contents when moved
+- Images by paste or drag and drop, stored once on the server by content hash
+- Follow mode: click a collaborator's avatar and your view tracks theirs
+- View-only links: viewers see every change live, and the server drops any edit they send
+- Version history: the server snapshots each board every 10 minutes while it changes, and
+  any snapshot can be restored as one undoable step
 - Live cursors, name tags and each person's selection
 - Per-user undo: undo reverts your own edits and never a collaborator's
 - Offline editing with IndexedDB; changes sync on reconnect without conflict dialogs
@@ -37,6 +43,8 @@ docker compose up --build
 - Every person picks a thread color that becomes their accent: selection, handles,
   cursor and avatar look the same on every screen
 - Empty boards offer a sample and a one-click second window to see collaboration
+- The home page runs the real editor: two scripted collaborators edit a document that
+  syncs between three Yjs replicas in the same tab
 - Light and dark themes; shape colors are stored as tokens so each viewer sees a palette
   that suits their theme
 
@@ -100,15 +108,17 @@ pnpm bench
 ```
 
 - Strict TypeScript (`noUncheckedIndexedAccess`, `erasableSyntaxOnly`), type-aware ESLint
-- 123 unit and integration tests, 87% line coverage of core and server; the server is
-  tested with real y-websocket clients
-- 7 end-to-end tests covering realtime sync, presence, per-user undo, persistence, the sample board
-  and the home page
+- 127 unit and integration tests, 88% line coverage of core and server; the server is
+  tested with real y-websocket clients, including view-only sockets, version history and
+  image uploads
+- 10 end-to-end tests covering realtime sync, presence, per-user undo, persistence, view-only
+  links, frames, follow mode, the sample board and the home page
 - CI runs all of the above plus a container build and health check
 
 ## Limitations
 
-- No accounts or permissions: anyone with a board link can edit it.
+- No accounts: the edit link is the permission. Anyone with it can edit, anyone with the
+  view link can watch.
 - Sticky and text content is last-writer-wins per shape; two people typing in the same
   note at the same moment will overwrite each other.
 - One server process holds all rooms in memory; horizontal scaling would need a shared

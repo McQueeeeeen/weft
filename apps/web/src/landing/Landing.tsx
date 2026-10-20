@@ -8,31 +8,9 @@ import type { ReactNode } from 'react'
 import { newBoardUrl } from '../app/routing.ts'
 import { useTheme } from '../app/theme.ts'
 import { Logo } from '../ui/Logo.tsx'
+import { LiveDemo } from './LiveDemo.tsx'
 
 const SOURCE_URL = 'https://github.com/McQueeeeeen/weft'
-
-function Shot({ alt }: { alt: string }) {
-  return (
-    <>
-      <img
-        className="shot shot-light"
-        src="/shots/board-light.png"
-        alt={alt}
-        width={2880}
-        height={1800}
-        loading="eager"
-      />
-      <img
-        className="shot shot-dark"
-        src="/shots/board-dark.png"
-        alt={alt}
-        width={2880}
-        height={1800}
-        loading="eager"
-      />
-    </>
-  )
-}
 
 function Fact({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -47,7 +25,7 @@ function Fact({ icon, title, children }: { icon: ReactNode; title: string; child
 }
 
 export function Landing() {
-  useTheme()
+  const { theme } = useTheme()
   const boardUrl = newBoardUrl()
 
   return (
@@ -82,8 +60,13 @@ export function Landing() {
               </a>
             </div>
           </div>
-          <figure className="hero-shot">
-            <Shot alt="A board with sticky notes joined by arrows, a collaborator's cursor and their selection in orange" />
+          <figure className="hero-demo">
+            <LiveDemo theme={theme} />
+            <figcaption>
+              <span className="live-dot" aria-hidden="true" />
+              Mira and Theo are scripted, but the board is real: three copies of one document
+              syncing in this tab. Drag a note to join them.
+            </figcaption>
           </figure>
         </section>
 
@@ -91,7 +74,7 @@ export function Landing() {
           <h2 id="inside-title">Built from the document model up</h2>
           <p className="inside-lead">
             No whiteboard framework underneath. Every piece below is written for this project and
-            covered by 130 automated tests.
+            covered by 137 automated tests.
           </p>
           <div className="inside-grid">
             <article className="feature">
