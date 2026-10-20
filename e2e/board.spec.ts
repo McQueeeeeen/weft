@@ -153,3 +153,24 @@ test('following someone keeps your view on theirs', async ({ browser }) => {
   await expect(bob.locator('.zoom-level')).toHaveText(zoom!)
   await expect(bob.getByText(/^Following /)).toBeVisible()
 })
+
+test('two people typing in one note keep both edits', async ({ browser }) => {
+  const alice = await openBoard(browser)
+  const bob = await openBoard(browser, new URL(alice.url()).pathname)
+  await alice.keyboard.press('s')
+  await alice.mouse.click(600, 360)
+  await alice.keyboard.type('Ship it')
+  await expect(bob.locator('[data-testid="board-summary"]')).toHaveText(/^1 object/)
+
+  await bob.mouse.dblclick(600, 360)
+  await bob.keyboard.press('ControlOrMeta+ArrowUp')
+  for (const [a, b] of [
+    ['!', 'W'],
+    [' now', 'e '],
+  ]) {
+    await alice.keyboard.type(a!)
+    await bob.keyboard.type(b!)
+  }
+  await expect(alice.getByLabel('Sticky note text')).toHaveValue('We Ship it! now')
+  await expect(bob.getByLabel('Sticky note text')).toHaveValue('We Ship it! now')
+})

@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { HttpError, ID, createApi, resolveView } from './api.ts'
+import type { Bus } from './bus.ts'
 import { silentLogger, type Logger } from './logger.ts'
 import type { Persistence } from './persistence.ts'
 import { Room } from './room.ts'
@@ -14,6 +15,7 @@ export interface ServerOptions {
   readonly port: number
   readonly host?: string
   readonly persistence: Persistence
+  readonly bus?: Bus
   readonly logger?: Logger
   readonly staticDir?: string | null
   readonly saveDebounceMs?: number
@@ -79,6 +81,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         saveMaxWaitMs: options.saveMaxWaitMs ?? 10_000,
         versionIntervalMs: options.versionIntervalMs ?? 10 * 60_000,
         maxVersions: options.maxVersions ?? 30,
+        bus: options.bus,
         onDisconnect: scheduleUnload,
       })
       rooms.set(name, room)

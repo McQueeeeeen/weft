@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type * as Y from 'yjs'
 import { connectedPair, partitionedPair, rect } from '../test-utils.ts'
 
 describe('collaboration', () => {
@@ -69,5 +70,35 @@ describe('collaboration', () => {
     a.update(id, { x: 1000, y: 1000 })
     expect(b.shapeAt({ x: 5, y: 5 }, 0)).toBeUndefined()
     expect(b.shapeAt({ x: 1005, y: 1005 }, 0)?.id).toBe(id)
+  })
+
+  it('merges two people typing in the same note', () => {
+    const { a, b, sync } = partitionedPair()
+    const id = a.create({
+      type: 'sticky',
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 200,
+      text: 'Ship on Friday',
+      color: 'yellow',
+    })
+    sync()
+    a.update(id, { text: 'Ship it on Friday' })
+    b.update(id, { text: 'Ship on Friday!' })
+    sync()
+    expect(a.get(id)).toMatchObject({ text: 'Ship it on Friday!' })
+    expect(b.get(id)).toEqual(a.get(id))
+  })
+
+  it('upgrades notes saved with plain strings on their first edit', () => {
+    const { a, b, sync } = partitionedPair()
+    const id = a.create(rect(0, 0, 10, 10))
+    a.doc.getMap<Y.Map<unknown>>('shapes').get(id)!.set('type', 'sticky')
+    a.doc.getMap<Y.Map<unknown>>('shapes').get(id)!.set('text', 'old')
+    sync()
+    b.update(id, { text: 'older' })
+    sync()
+    expect(a.get(id)).toMatchObject({ type: 'sticky', text: 'older' })
   })
 })

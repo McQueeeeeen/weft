@@ -1,5 +1,5 @@
 import type { Vec } from '../geometry/vec.ts'
-import type { ColorToken, Fill, Size } from '../model/shapes.ts'
+import type { ColorToken, Fill, Route, Size } from '../model/shapes.ts'
 
 export const TOOLS = [
   'select',
@@ -71,6 +71,7 @@ export interface Style {
   readonly color: ColorToken
   readonly fill: Fill
   readonly size: Size
+  readonly route: Route
 }
 
-export const DEFAULT_STYLE: Style = { color: 'ink', fill: 'none', size: 'm' }
+export const DEFAULT_STYLE: Style = { color: 'ink', fill: 'none', size: 'm', route: 'straight' }

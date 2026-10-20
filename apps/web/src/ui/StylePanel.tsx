@@ -4,7 +4,15 @@ import {
   CopySimpleIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
-import { COLORS, hasFill, type ColorToken, type Editor, type Fill, type Size } from '@weft/core'
+import {
+  COLORS,
+  hasFill,
+  type ColorToken,
+  type Editor,
+  type Fill,
+  type Route,
+  type Size,
+} from '@weft/core'
 import type { Theme } from '../canvas/palette.ts'
 import { useEditor } from '../app/hooks.ts'
 
@@ -17,6 +25,11 @@ const COLOR_NAMES: Record<ColorToken, string> = {
   blue: 'Blue',
   violet: 'Violet',
 }
+
+const ROUTE_OPTIONS: { value: Route; label: string }[] = [
+  { value: 'straight', label: 'Straight' },
+  { value: 'elbow', label: 'Elbow' },
+]
 
 const FILL_OPTIONS: { value: Fill; label: string }[] = [
   { value: 'none', label: 'None' },
@@ -46,6 +59,7 @@ export function StylePanel({ editor, theme }: { editor: Editor; theme: Theme }) 
       showFill:
         selected.length > 0 ? selected.some(hasFill) : tool === 'rect' || tool === 'ellipse',
       showSize: targets.some((t) => t !== 'sticky'),
+      showRoute: targets.includes('arrow'),
       paper: targets.every((t) => t === 'sticky'),
       count: selected.length,
     }
@@ -88,6 +102,26 @@ export function StylePanel({ editor, theme }: { editor: Editor; theme: Theme }) 
                   value={option.value}
                   checked={view.fill === option.value}
                   onChange={() => editor.setStyle({ fill: option.value })}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      {view.showRoute && (
+        <fieldset className="style-group">
+          <legend>Line</legend>
+          <div className="segmented">
+            {ROUTE_OPTIONS.map((option) => (
+              <label key={option.value}>
+                <input
+                  type="radio"
+                  name="route"
+                  value={option.value}
+                  checked={view.route === option.value}
+                  onChange={() => editor.setStyle({ route: option.value })}
                 />
                 <span>{option.label}</span>
               </label>

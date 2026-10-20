@@ -258,6 +258,7 @@ export class Demo {
           end: null,
           size: 'm',
           color: 'ink',
+          route: 'straight',
         })
         await this.tween(700, (t) => {
           const x2 = 250 + 40 * t

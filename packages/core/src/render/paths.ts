@@ -1,4 +1,5 @@
-import type { Vec } from '../geometry/vec.ts'
+import { moveToward } from '../geometry/intersect.ts'
+import { dist, type Vec } from '../geometry/vec.ts'
 import type { PenShape } from '../model/shapes.ts'
 import { ARROWHEAD_SIZE } from '../model/geometry.ts'
 
@@ -34,4 +35,21 @@ export function arrowHead(start: Vec, end: Vec, strokeWidth: number): [Vec, Vec]
     { x: end.x - length * Math.cos(angle - spread), y: end.y - length * Math.sin(angle - spread) },
     { x: end.x - length * Math.cos(angle + spread), y: end.y - length * Math.sin(angle + spread) },
   ]
+}
+
+const CORNER = 12
+
+export function arrowPathData(points: readonly Vec[]): string {
+  let d = `M${r(points[0]!.x)} ${r(points[0]!.y)}`
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1]!
+    const p = points[i]!
+    const next = points[i + 1]!
+    const radius = Math.min(CORNER, dist(prev, p) / 2, dist(p, next) / 2)
+    const a = moveToward(p, prev, radius)
+    const b = moveToward(p, next, radius)
+    d += `L${r(a.x)} ${r(a.y)}Q${r(p.x)} ${r(p.y)} ${r(b.x)} ${r(b.y)}`
+  }
+  const last = points[points.length - 1]!
+  return d + `L${r(last.x)} ${r(last.y)}`
 }

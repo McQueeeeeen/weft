@@ -119,6 +119,7 @@ describe('Board', () => {
         end: to,
         color: 'ink',
         size: 'm',
+        route: 'straight',
       })
       return { board, from, to, arrow }
     }

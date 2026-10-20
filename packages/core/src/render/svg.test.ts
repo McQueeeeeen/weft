@@ -85,6 +85,7 @@ describe('exportSvg', () => {
       end: null,
       color: 'ink',
       size: 'm',
+      route: 'straight',
     })
     const svg = exportSvg(board.all(), board.lookup, options)!
     for (const tag of ['<rect', '<ellipse', '<text', '<tspan', '<path']) expect(svg).toContain(tag)

@@ -7,6 +7,9 @@ export type Fill = (typeof FILLS)[number]
 export const SIZES = ['s', 'm', 'l'] as const
 export type Size = (typeof SIZES)[number]
 
+export const ROUTES = ['straight', 'elbow'] as const
+export type Route = (typeof ROUTES)[number]
+
 interface ShapeBase {
   readonly id: string
   readonly index: string
@@ -52,6 +55,7 @@ export interface ArrowShape extends ShapeBase {
   readonly start: string | null
   readonly end: string | null
   readonly size: Size
+  readonly route: Route
 }
 
 export interface ImageShape extends BoxShapeBase {

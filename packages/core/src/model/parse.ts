@@ -1,4 +1,4 @@
-import { ASSET_SRC, COLORS, FILLS, SIZES, type Shape } from './shapes.ts'
+import { ASSET_SRC, COLORS, FILLS, ROUTES, SIZES, type Shape } from './shapes.ts'
 
 export function parseShape(id: string, raw: unknown): Shape | null {
   if (!isRecord(raw)) return null
@@ -40,7 +40,8 @@ export function parseShape(id: string, raw: unknown): Shape | null {
       if (!isFiniteNumber(x1) || !isFiniteNumber(y1)) return null
       if (!isFiniteNumber(x2) || !isFiniteNumber(y2)) return null
       if (!isBinding(start) || !isBinding(end) || !isOneOf(size, SIZES)) return null
-      return { ...base, type: 'arrow', x1, y1, x2, y2, start, end, size }
+      const route = isOneOf(raw.route, ROUTES) ? raw.route : 'straight'
+      return { ...base, type: 'arrow', x1, y1, x2, y2, start, end, size, route }
     }
     case 'pen': {
       const box = parseBox(raw)

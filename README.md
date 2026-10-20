@@ -29,6 +29,10 @@ docker compose up --build
 - Rectangles, ellipses, sticky notes, text, freehand pen and arrows that stay attached to
   shapes as they move
 - Frames that group a section of the board and carry their contents when moved
+- Two people can type in the same note at once and both edits are kept
+- Elbow arrows that find their own path around the shapes they connect
+- Alignment guides: dragged and resized shapes snap to the edges and centers of their
+  neighbours (hold Cmd or Ctrl to place freely)
 - Images by paste or drag and drop, stored once on the server by content hash
 - Follow mode: click a collaborator's avatar and your view tracks theirs
 - View-only links: viewers see every change live, and the server drops any edit they send
@@ -96,8 +100,26 @@ Open any board with `?debug` to see live frame timing and add shapes in batches 
 malformed update from one client cannot break rendering for the room. The server drops
 malformed messages, caps message size and terminates dead connections.
 
-**Text editing uses a real textarea** positioned over the shape, so IME, spellcheck and
-screen readers work, and each keystroke syncs live.
+**Several server instances can serve one board.** With `REDIS_URL` set, each loaded room
+subscribes to a Redis channel and relays edits and presence to the other instances. A
+room loading on a new instance asks its peers for changes not yet saved. The Redis client
+is a small RESP client over `node:net`, with no extra dependency
+([ADR 5](docs/adr/0005-multi-instance-sync.md)).
+
+**Text merges by character.** Note text is a `Y.Text`. Each keystroke is turned into the
+smallest insert or delete by diffing against the previous value, so two people typing in
+one note keep both edits, and the textarea keeps your caret on the same character while
+someone else types before it. Text editing uses a real textarea positioned over the
+shape, so IME, spellcheck and screen readers work.
+
+**Elbow arrows route with A\*.** The router builds a sparse orthogonal grid from the
+connected shapes' edges, searches it with A\* (path length plus a cost per bend) for
+every pair of sides, and keeps the cheapest route. Routes are cached per arrow and take
+about 0.07 ms to compute, so dragging a shape re-routes its arrows every frame.
+
+**Snapping uses the spatial index.** At the start of a drag the editor collects the
+shapes in view once; each frame then compares three lines per axis against them and
+draws a guide for every line that matches.
 
 ## Quality
 
@@ -108,18 +130,16 @@ pnpm bench
 ```
 
 - Strict TypeScript (`noUncheckedIndexedAccess`, `erasableSyntaxOnly`), type-aware ESLint
-- 127 unit and integration tests, 88% line coverage of core and server; the server is
-  tested with real y-websocket clients, including view-only sockets, version history and
-  image uploads
-- 10 end-to-end tests covering realtime sync, presence, per-user undo, persistence, view-only
-  links, frames, follow mode, the sample board and the home page
+- 149 unit and integration tests, 90% line coverage of core and server; the server is
+  tested with real y-websocket clients, including view-only sockets, version history, image
+  uploads and two instances sharing a bus; the router is checked against 200 random layouts
+- 11 end-to-end tests covering realtime sync, presence, per-user undo, persistence, view-only
+  links, frames, follow mode, two people typing in one note, the sample board and the home page
 - CI runs all of the above plus a container build and health check
 
 ## Limitations
 
 - No accounts: the edit link is the permission. Anyone with it can edit, anyone with the
   view link can watch.
-- Sticky and text content is last-writer-wins per shape; two people typing in the same
-  note at the same moment will overwrite each other.
-- One server process holds all rooms in memory; horizontal scaling would need a shared
-  pub/sub layer between instances.
+- Several server instances need shared storage for snapshots (one volume or another
+  `Persistence` backend); Redis only carries live traffic.

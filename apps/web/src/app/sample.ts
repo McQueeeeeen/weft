@@ -47,6 +47,7 @@ export function insertSample(editor: Editor): void {
     })),
     ...ids.slice(1).map((end, i) => ({
       type: 'arrow' as const,
+      route: 'elbow' as const,
       x1: left + i * (SIDE + GAP) + SIDE,
       y1: center.y,
       x2: left + (i + 1) * (SIDE + GAP),

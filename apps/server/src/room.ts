@@ -9,6 +9,7 @@ import {
 } from 'y-protocols/awareness'
 import * as syncProtocol from 'y-protocols/sync'
 import * as Y from 'yjs'
+import type { Bus } from './bus.ts'
 import type { Logger } from './logger.ts'
 import type { Persistence } from './persistence.ts'
 
@@ -17,6 +18,7 @@ export const MESSAGE_AWARENESS = 1
 export const MESSAGE_QUERY_AWARENESS = 3
 
 const PERSISTENCE_ORIGIN = 'persistence'
+const BUS_ORIGIN = 'bus'
 
 export interface RoomOptions {
   readonly name: string
@@ -26,25 +28,28 @@ export interface RoomOptions {
   readonly saveMaxWaitMs: number
   readonly versionIntervalMs: number
   readonly maxVersions: number
+  readonly bus?: Bus
   readonly onDisconnect?: (room: Room) => void
 }
 
 export class Room {
   readonly name: string
+  private readonly channel: string
   readonly doc = new Y.Doc()
   readonly awareness = new Awareness(this.doc)
 
   private readonly options: RoomOptions
   private readonly connections = new Map<WebSocket, Set<number>>()
   private readonly readers = new WeakSet<WebSocket>()
-  private lastVersionAt = 0
   private saveTimer: NodeJS.Timeout | null = null
   private firstUnsavedAt: number | null = null
   private saving: Promise<void> = Promise.resolve()
+  private unsubscribe: (() => void) | null = null
 
   private constructor(options: RoomOptions) {
     this.options = options
     this.name = options.name
+    this.channel = `weft:room:${options.name}`
     this.awareness.setLocalState(null)
   }
 
@@ -52,10 +57,13 @@ export class Room {
     const room = new Room(options)
     const state = await options.persistence.get(`rooms/${options.name}`)
     if (state) Y.applyUpdate(room.doc, state, PERSISTENCE_ORIGIN)
-    const versions = await options.persistence.list(`versions/${options.name}`)
-    room.lastVersionAt = Math.max(0, ...versions.map(Number))
     room.doc.on('update', room.onDocUpdate)
     room.awareness.on('update', room.onAwarenessUpdate)
+    if (options.bus) {
+      room.unsubscribe = options.bus.subscribe(room.channel, room.onBusMessage)
+      room.publish(room.syncStep1())
+      room.publish(new Uint8Array([MESSAGE_QUERY_AWARENESS]))
+    }
     return room
   }
 
@@ -70,10 +78,7 @@ export class Room {
     ws.on('close', () => this.disconnect(ws))
     ws.on('error', () => this.disconnect(ws))
 
-    const encoder = encoding.createEncoder()
-    encoding.writeVarUint(encoder, MESSAGE_SYNC)
-    syncProtocol.writeSyncStep1(encoder, this.doc)
-    this.send(ws, encoding.toUint8Array(encoder))
+    this.send(ws, this.syncStep1())
     this.sendAwarenessSnapshot(ws)
 
     for (const message of buffered) this.onMessage(ws, message)
@@ -86,25 +91,28 @@ export class Room {
     }
     if (this.firstUnsavedAt === null) return this.saving
     this.firstUnsavedAt = null
-    const state = Y.encodeStateAsUpdate(this.doc)
     this.saving = this.saving
-      .then(() => this.options.persistence.put(`rooms/${this.name}`, state))
-      .then(() => this.recordVersion(state))
+      .then(() => this.save())
       .catch((error: unknown) => {
         this.options.logger.error('snapshot failed', { room: this.name, error: String(error) })
       })
     return this.saving
   }
 
-  private async recordVersion(state: Uint8Array): Promise<void> {
-    const now = Date.now()
-    if (now - this.lastVersionAt < this.options.versionIntervalMs) return
-    this.lastVersionAt = now
-    const { persistence, maxVersions } = this.options
+  private async save(): Promise<void> {
+    const { persistence, versionIntervalMs, maxVersions } = this.options
+    const key = `rooms/${this.name}`
+    const stored = await persistence.get(key)
+    if (stored) Y.applyUpdate(this.doc, stored, PERSISTENCE_ORIGIN)
+    const state = Y.encodeStateAsUpdate(this.doc)
+    await persistence.put(key, state)
     const dir = `versions/${this.name}`
+    const versions = (await persistence.list(dir)).map(Number).sort((a, b) => b - a)
+    const now = Date.now()
+    if (now - (versions[0] ?? 0) < versionIntervalMs) return
     await persistence.put(`${dir}/${now}`, state)
-    const all = (await persistence.list(dir)).map(Number).sort((a, b) => b - a)
-    await Promise.all(all.slice(maxVersions).map((at) => persistence.delete(`${dir}/${at}`)))
+    const stale = versions.slice(maxVersions - 1)
+    await Promise.all(stale.map((at) => persistence.delete(`${dir}/${at}`)))
   }
 
   closeAll(code: number, reason: string): void {
@@ -113,6 +121,7 @@ export class Room {
 
   destroy(): void {
     if (this.saveTimer) clearTimeout(this.saveTimer)
+    this.unsubscribe?.()
     this.awareness.destroy()
     this.doc.destroy()
   }
@@ -150,11 +159,38 @@ export class Room {
     }
   }
 
-  private readonly onDocUpdate = (update: Uint8Array) => {
+  private readonly onBusMessage = (message: Uint8Array) => {
+    try {
+      const decoder = decoding.createDecoder(message)
+      if (decoding.readVarUint(decoder) === this.doc.clientID) return
+      switch (decoding.readVarUint(decoder)) {
+        case MESSAGE_SYNC: {
+          const encoder = encoding.createEncoder()
+          encoding.writeVarUint(encoder, MESSAGE_SYNC)
+          syncProtocol.readSyncMessage(decoder, encoder, this.doc, BUS_ORIGIN)
+          if (encoding.length(encoder) > 1) this.publish(encoding.toUint8Array(encoder))
+          break
+        }
+        case MESSAGE_AWARENESS:
+          applyAwarenessUpdate(this.awareness, decoding.readVarUint8Array(decoder), BUS_ORIGIN)
+          break
+        case MESSAGE_QUERY_AWARENESS: {
+          const clients = [...this.awareness.getStates().keys()]
+          if (clients.length > 0) this.publish(this.awarenessMessage(clients))
+        }
+      }
+    } catch (error) {
+      this.options.logger.warn('rejected bus message', { room: this.name, error: String(error) })
+    }
+  }
+
+  private readonly onDocUpdate = (update: Uint8Array, origin: unknown) => {
     const encoder = encoding.createEncoder()
     encoding.writeVarUint(encoder, MESSAGE_SYNC)
     syncProtocol.writeUpdate(encoder, update)
-    this.broadcast(encoding.toUint8Array(encoder))
+    const message = encoding.toUint8Array(encoder)
+    this.broadcast(message)
+    if (origin !== BUS_ORIGIN) this.publish(message)
     this.scheduleSave()
   }
 
@@ -167,20 +203,35 @@ export class Room {
       for (const id of [...added, ...updated]) controlled.add(id)
       for (const id of removed) controlled.delete(id)
     }
-    const changed = [...added, ...updated, ...removed]
-    const encoder = encoding.createEncoder()
-    encoding.writeVarUint(encoder, MESSAGE_AWARENESS)
-    encoding.writeVarUint8Array(encoder, encodeAwarenessUpdate(this.awareness, changed))
-    this.broadcast(encoding.toUint8Array(encoder))
+    const message = this.awarenessMessage([...added, ...updated, ...removed])
+    this.broadcast(message)
+    if (origin !== BUS_ORIGIN) this.publish(message)
   }
 
   private sendAwarenessSnapshot(ws: WebSocket): void {
     const clients = [...this.awareness.getStates().keys()]
-    if (clients.length === 0) return
+    if (clients.length > 0) this.send(ws, this.awarenessMessage(clients))
+  }
+
+  private awarenessMessage(clients: number[]): Uint8Array {
     const encoder = encoding.createEncoder()
     encoding.writeVarUint(encoder, MESSAGE_AWARENESS)
     encoding.writeVarUint8Array(encoder, encodeAwarenessUpdate(this.awareness, clients))
-    this.send(ws, encoding.toUint8Array(encoder))
+    return encoding.toUint8Array(encoder)
+  }
+
+  private syncStep1(): Uint8Array {
+    const encoder = encoding.createEncoder()
+    encoding.writeVarUint(encoder, MESSAGE_SYNC)
+    syncProtocol.writeSyncStep1(encoder, this.doc)
+    return encoding.toUint8Array(encoder)
+  }
+
+  private publish(message: Uint8Array): void {
+    const encoder = encoding.createEncoder()
+    encoding.writeVarUint(encoder, this.doc.clientID)
+    encoding.writeUint8Array(encoder, message)
+    this.options.bus?.publish(this.channel, encoding.toUint8Array(encoder))
   }
 
   private disconnect(ws: WebSocket): void {

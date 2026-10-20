@@ -30,6 +30,7 @@ const GROUPS: { title: string; rows: [string, string][] }[] = [
       ['] and [', 'Bring to front, send to back'],
       ['Enter', 'Edit text of the selected note'],
       ['Shift while dragging', 'Lock axis, keep proportions'],
+      ['Cmd or Ctrl while dragging', 'Move without snapping'],
       ['Escape', 'Cancel, deselect'],
     ],
   },

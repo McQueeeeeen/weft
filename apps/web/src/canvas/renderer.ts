@@ -1,11 +1,12 @@
 import {
-  boxFromPoints,
   type Box,
   type Editor,
   type Peer,
   type Shape,
   type Vec,
-  arrowEndpoints,
+  arrowPathData,
+  arrowPoints,
+  boxOfPoints,
   boxOf,
   worldToScreen,
 } from '@weft/core'
@@ -201,6 +202,31 @@ export class Renderer {
       ctx.lineWidth = 1
       ctx.strokeRect(box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY)
     }
+
+    ctx.strokeStyle = accent
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    for (const guide of editor.guides) {
+      const vertical = guide.axis === 'x'
+      const a = this.toScreen({
+        minX: vertical ? guide.at : guide.from,
+        minY: vertical ? guide.from : guide.at,
+        maxX: vertical ? guide.at : guide.to,
+        maxY: vertical ? guide.to : guide.at,
+      })
+      ctx.moveTo(a.minX, a.minY)
+      ctx.lineTo(a.maxX, a.maxY)
+      for (const [x, y] of [
+        [a.minX, a.minY],
+        [a.maxX, a.maxY],
+      ] as const) {
+        ctx.moveTo(x - 3, y - 3)
+        ctx.lineTo(x + 3, y + 3)
+        ctx.moveTo(x + 3, y - 3)
+        ctx.lineTo(x - 3, y + 3)
+      }
+    }
+    ctx.stroke()
   }
 
   private drawPeerSelections(peers: readonly Peer[]): void {
@@ -289,17 +315,14 @@ export class Renderer {
     ctx.strokeStyle = color
     ctx.lineWidth = width
     if (shape.type === 'arrow') {
-      const { start, end } = arrowEndpoints(shape, this.editor.board.lookup)
-      const a = worldToScreen(this.editor.camera, start)
-      const b = worldToScreen(this.editor.camera, end)
-      ctx.beginPath()
-      ctx.moveTo(a.x, a.y)
-      ctx.lineTo(b.x, b.y)
+      const points = arrowPoints(shape, this.editor.board.lookup).map((p) =>
+        worldToScreen(this.editor.camera, p),
+      )
       ctx.globalAlpha = 0.28
       ctx.lineWidth = width + 8
-      ctx.stroke()
+      ctx.stroke(new Path2D(arrowPathData(points)))
       ctx.globalAlpha = 1
-      return boxFromPoints(a, b)
+      return boxOfPoints(points)
     }
     const box = this.toScreen(boxOf(shape))
     const pad = 3

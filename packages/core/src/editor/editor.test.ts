@@ -500,4 +500,27 @@ describe('Editor', () => {
       expect(editor.tool).toBe('hand')
     })
   })
+
+  describe('snapping', () => {
+    it('aligns a dragged shape with its neighbours and shows guides while dragging', () => {
+      const editor = createEditor()
+      editor.board.create(rect(0, 0, 100, 100))
+      const moving = editor.board.create(rect(300, 3, 100, 100))
+      const p = pointer(editor)
+      p.down(350, 50)
+      p.move(360, 50)
+      expect(editor.guides).toContainEqual({ axis: 'y', at: 0, from: 0, to: 410 })
+      p.up(360, 50)
+      expect(editor.board.get(moving)).toMatchObject({ x: 310, y: 0 })
+      expect(editor.guides).toEqual([])
+    })
+
+    it('moves freely while the modifier key is held', () => {
+      const editor = createEditor()
+      editor.board.create(rect(0, 0, 100, 100))
+      const moving = editor.board.create(rect(300, 3, 100, 100))
+      pointer(editor).drag({ x: 350, y: 50 }, { x: 360, y: 50 }, { mod: true })
+      expect(editor.board.get(moving)).toMatchObject({ x: 310, y: 3 })
+    })
+  })
 })

@@ -7,6 +7,7 @@ import { arrowEndpoints, hitTestShape, shapeBounds } from './geometry.ts'
 import { createId } from './ids.ts'
 import { parseShape } from './parse.ts'
 import type { Shape, ShapeInput, ShapePatch } from './shapes.ts'
+import { textDiff } from './text.ts'
 
 export interface BoardChange {
   readonly added: ReadonlySet<string>
@@ -122,7 +123,9 @@ export class Board {
     this.transact(() => {
       for (const [key, value] of Object.entries(patch)) {
         if (value === undefined || key === 'id' || key === 'type') continue
-        if (y.get(key) !== value) y.set(key, value)
+        const current = y.get(key)
+        if (current instanceof Y.Text && typeof value === 'string') editText(current, value)
+        else if (current !== value) y.set(key, key === 'text' ? new Y.Text(value as string) : value)
       }
     })
   }
@@ -281,6 +284,14 @@ const EMPTY_SET: ReadonlySet<string> = new Set()
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 function toYMap(record: Record<string, unknown>): ShapeMap {
-  const entries = Object.entries(record).filter(([key, v]) => v !== undefined && key !== 'id')
+  const entries = Object.entries(record)
+    .filter(([key, v]) => v !== undefined && key !== 'id')
+    .map(([key, v]) => [key, key === 'text' && typeof v === 'string' ? new Y.Text(v) : v] as const)
   return new Y.Map(entries)
+}
+
+function editText(text: Y.Text, next: string): void {
+  const { start, remove, insert } = textDiff(text.toJSON(), next)
+  if (remove > 0) text.delete(start, remove)
+  if (insert) text.insert(start, insert)
 }

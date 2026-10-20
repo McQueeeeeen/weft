@@ -58,3 +58,10 @@ export const boxUnionAll = (boxes: Iterable<Box>): Box | null => {
   for (const b of boxes) result = result ? boxUnion(result, b) : b
   return result
 }
+
+export const boxTranslate = (b: Box, dx: number, dy: number): Box => ({
+  minX: b.minX + dx,
+  minY: b.minY + dy,
+  maxX: b.maxX + dx,
+  maxY: b.maxY + dy,
+})

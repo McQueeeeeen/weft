@@ -5,9 +5,10 @@ import {
   STICKY_FONT_SIZE,
   STICKY_PADDING,
   frameTitleBox,
+  shiftCaret,
   type Editor,
 } from '@weft/core'
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { Theme } from '../canvas/palette.ts'
 import { BOARD_FONT } from '../canvas/palette.ts'
 import { measureTextBlock } from '../canvas/text-layout.ts'
@@ -36,13 +37,29 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
     }
   })
 
+  const caret = useRef({ text: '', start: 0, end: 0 })
+  const remember = (el: HTMLTextAreaElement) => {
+    caret.current = { text: el.value, start: el.selectionStart, end: el.selectionEnd }
+  }
+
   const editingId = view?.id
   useEffect(() => {
     const el = ref.current
     if (!el || !editingId) return
     el.focus({ preventScroll: true })
     el.setSelectionRange(el.value.length, el.value.length)
+    remember(el)
   }, [editingId])
+
+  const text = view?.text
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || text === undefined || document.activeElement !== el) return
+    const { text: before, start, end } = caret.current
+    if (before === text) return
+    el.setSelectionRange(shiftCaret(before, text, start), shiftCaret(before, text, end))
+    remember(el)
+  }, [text])
 
   if (!view) return null
 
@@ -73,7 +90,9 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
         lineHeight: LINE_HEIGHT,
         color: isSticky ? colors.stickyText : colors.stroke,
       }}
+      onSelect={(e) => remember(e.currentTarget)}
       onChange={(e) => {
+        remember(e.target)
         const text = e.target.value
         if (isFrame) {
           editor.updateText(view.id, text.replace(/\n/g, ' '))

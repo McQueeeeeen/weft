@@ -4,6 +4,7 @@ import {
   boxContainsPoint,
   boxExpand,
   boxFromPoints,
+  boxTranslate,
   boxUnionAll,
   type Box,
 } from '../geometry/box.ts'
@@ -11,7 +12,14 @@ import { simplifyPolyline } from '../geometry/simplify.ts'
 import { dist, mid, type Vec } from '../geometry/vec.ts'
 import { History } from '../history.ts'
 import type { Board } from '../model/board.ts'
-import { arrowEndpoints, boxOf, resizePatch, translatePatch } from '../model/geometry.ts'
+import {
+  arrowEndpoints,
+  arrowPoints,
+  boxOf,
+  boxOfPoints,
+  resizePatch,
+  translatePatch,
+} from '../model/geometry.ts'
 import {
   FONT_SIZE,
   STICKY_SIZE,
@@ -22,6 +30,7 @@ import {
 } from '../model/shapes.ts'
 import type { Presence } from '../presence.ts'
 import { deserializeShapes, serializeShapes } from './clipboard.ts'
+import { resizeEdges, snapBox, type Guide } from './snap.ts'
 import {
   cursorForHandle,
   handleAt,
@@ -56,9 +65,22 @@ type Gesture =
       duplicate: boolean
     }
   | { kind: 'pointing-canvas'; startScreen: Vec; startWorld: Vec; additive: boolean }
-  | { kind: 'translating'; startWorld: Vec; origins: Shape[] }
+  | {
+      kind: 'translating'
+      startWorld: Vec
+      origins: Shape[]
+      startBox: Box | null
+      targets: readonly Box[]
+    }
   | { kind: 'marquee'; startWorld: Vec; base: readonly string[] }
-  | { kind: 'resizing'; handle: ResizeHandle; startWorld: Vec; startFrame: Box; origins: Shape[] }
+  | {
+      kind: 'resizing'
+      handle: ResizeHandle
+      startWorld: Vec
+      startFrame: Box
+      origins: Shape[]
+      targets: readonly Box[]
+    }
   | { kind: 'moving-arrow-end'; id: string; which: ArrowHandle; origin: Shape }
   | { kind: 'creating'; id: string; startWorld: Vec }
   | { kind: 'drawing-arrow'; id: string; startWorld: Vec }
@@ -73,6 +95,7 @@ const HANDLE_RADIUS = { fine: 8, coarse: 18 }
 const DEFAULT_BOX = { w: 160, h: 100 }
 const DEFAULT_FRAME = { w: 640, h: 420 }
 const PEN_FLUSH_MS = 32
+const SNAP_DISTANCE = 6
 const NUDGE = 1
 const NUDGE_LARGE = 10
 const ZOOM_STEP = 1.25
@@ -98,6 +121,7 @@ export class Editor {
   private _editing: string | null = null
   private _marquee: Box | null = null
   private _bindTarget: string | null = null
+  private _guides: readonly Guide[] = []
   private _style: Style = DEFAULT_STYLE
   private _spaceHeld = false
   private _cursor: CursorKind = 'default'
@@ -163,6 +187,9 @@ export class Editor {
   get bindTarget(): string | null {
     return this._bindTarget
   }
+  get guides(): readonly Guide[] {
+    return this._guides
+  }
   get cursor(): CursorKind {
     return this._cursor
   }
@@ -181,6 +208,7 @@ export class Editor {
       color: first.color,
       fill: hasFill(first) ? first.fill : this._style.fill,
       size: 'size' in first ? first.size : this._style.size,
+      route: first.type === 'arrow' ? first.route : this._style.route,
     }
   }
 
@@ -469,7 +497,7 @@ export class Editor {
         return this.createText(world)
       case 'arrow': {
         const target = this.bindableAt(world)
-        const { color, size } = this._style
+        const { color, size, route } = this._style
         const id = this.board.create({
           type: 'arrow',
           x1: world.x,
@@ -480,6 +508,7 @@ export class Editor {
           end: null,
           color,
           size,
+          route,
         })
         this.select([id])
         this.gesture = { kind: 'drawing-arrow', id, startWorld: world }
@@ -530,10 +559,13 @@ export class Editor {
       case 'pointing-shape': {
         if (this.readOnly || !this.pastThreshold(g.startScreen, e.point)) return
         if (g.duplicate) this.duplicateInPlace()
+        const origins = this.withFrameContents(this.selectedShapes())
         this.gesture = {
           kind: 'translating',
           startWorld: g.startWorld,
-          origins: this.withFrameContents(this.selectedShapes()),
+          origins,
+          startBox: boxUnionAll(origins.filter((o) => o.type !== 'arrow').map(boxOf)),
+          targets: this.snapTargets(origins),
         }
         this._cursor = 'move'
         return this.pointerMove(e)
@@ -554,10 +586,17 @@ export class Editor {
           if (Math.abs(dx) > Math.abs(dy)) dy = 0
           else dx = 0
         }
+        const snap =
+          g.startBox && !e.shift && !e.mod
+            ? snapBox(boxTranslate(g.startBox, dx, dy), g.targets, SNAP_DISTANCE / this._camera.z)
+            : null
+        dx += snap?.dx ?? 0
+        dy += snap?.dy ?? 0
+        this._guides = snap?.guides ?? []
         this.board.transact(() => {
           for (const shape of g.origins) this.board.update(shape.id, translatePatch(shape, dx, dy))
         })
-        return
+        return this.changed()
       }
       case 'marquee': {
         const box = boxFromPoints(g.startWorld, world)
@@ -570,18 +609,26 @@ export class Editor {
         return this.changed()
       }
       case 'resizing': {
-        const frame = resizeBox(
-          g.startFrame,
-          g.handle,
-          world.x - g.startWorld.x,
-          world.y - g.startWorld.y,
-          e.shift,
-        )
+        let dx = world.x - g.startWorld.x
+        let dy = world.y - g.startWorld.y
+        const snap =
+          e.shift || e.mod
+            ? null
+            : snapBox(
+                resizeBox(g.startFrame, g.handle, dx, dy, false),
+                g.targets,
+                SNAP_DISTANCE / this._camera.z,
+                resizeEdges(g.handle),
+              )
+        dx += snap?.dx ?? 0
+        dy += snap?.dy ?? 0
+        this._guides = snap?.guides ?? []
+        const frame = resizeBox(g.startFrame, g.handle, dx, dy, e.shift)
         this.board.transact(() => {
           for (const shape of g.origins)
             this.board.update(shape.id, resizePatch(shape, g.startFrame, frame))
         })
-        return
+        return this.changed()
       }
       case 'moving-arrow-end': {
         const arrow = this.board.get(g.id)
@@ -648,6 +695,7 @@ export class Editor {
     const g = this.gesture
     this.gesture = IDLE
     this._bindTarget = null
+    this._guides = []
 
     switch (g.kind) {
       case 'idle':
@@ -732,6 +780,7 @@ export class Editor {
     this.gesture = IDLE
     this._marquee = null
     this._bindTarget = null
+    this._guides = []
     this.touches.clear()
     switch (g.kind) {
       case 'translating':
@@ -890,6 +939,7 @@ export class Editor {
         startWorld: world,
         startFrame: this.selectionFrame()!,
         origins: this.selectedShapes(),
+        targets: this.snapTargets(this.selectedShapes()),
       }
       this._cursor = cursorForHandle(handle)
       return this.changed()
@@ -1047,10 +1097,18 @@ export class Editor {
     )
   }
 
+  private snapTargets(moving: readonly Shape[]): Box[] {
+    const skip = new Set(moving.map((s) => s.id))
+    const { width, height } = this._viewport
+    return this.board
+      .queryBox(viewportBox(this._camera, width, height))
+      .flatMap((s) => (s.type === 'arrow' || skip.has(s.id) ? [] : [boxOf(s)]))
+  }
+
   private frameOf(shape: Shape): Box {
-    if (shape.type !== 'arrow') return boxOf(shape)
-    const { start, end } = arrowEndpoints(shape, this.board.lookup)
-    return boxFromPoints(start, end)
+    return shape.type === 'arrow'
+      ? boxOfPoints(arrowPoints(shape, this.board.lookup))
+      : boxOf(shape)
   }
 
   private idleCursor(): CursorKind {
@@ -1089,6 +1147,7 @@ export class Editor {
 function stylePatch(shape: Shape, patch: Partial<Style>): ShapePatch {
   const out: Record<string, unknown> = {}
   if (patch.color) out.color = patch.color
+  if (patch.route && shape.type === 'arrow') out.route = patch.route
   if (patch.fill && hasFill(shape)) out.fill = patch.fill
   if (patch.size && 'size' in shape && patch.size !== shape.size) {
     out.size = patch.size

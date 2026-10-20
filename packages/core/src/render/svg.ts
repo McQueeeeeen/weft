@@ -1,5 +1,5 @@
 import { boxExpand, boxHeight, boxUnionAll, boxWidth } from '../geometry/box.ts'
-import { arrowEndpoints, shapeBounds, type ShapeLookup } from '../model/geometry.ts'
+import { arrowPoints, shapeBounds, type ShapeLookup } from '../model/geometry.ts'
 import {
   FONT_SIZE,
   FRAME_TITLE_GAP,
@@ -9,7 +9,7 @@ import {
   type ColorToken,
   type Shape,
 } from '../model/shapes.ts'
-import { arrowHead, penPathData } from './paths.ts'
+import { arrowHead, arrowPathData, penPathData } from './paths.ts'
 
 export type PaletteRole = 'stroke' | 'tint' | 'sticky' | 'stickyText'
 
@@ -85,12 +85,13 @@ function shapeToSvg(shape: Shape, lookup: ShapeLookup, o: SvgExportOptions): str
       return textBlock(lines, shape.x, shape.y, size, o.color(shape.color, 'stroke'))
     }
     case 'arrow': {
-      const { start, end } = arrowEndpoints(shape, lookup)
+      const points = arrowPoints(shape, lookup)
+      const end = points[points.length - 1]!
       const width = STROKE_WIDTH[shape.size]
-      const [a, b] = arrowHead(start, end, width)
+      const [a, b] = arrowHead(points[points.length - 2]!, end, width)
       const stroke = attr(o.color(shape.color, 'stroke'))
       return (
-        `<path d="M${start.x} ${start.y}L${end.x} ${end.y}M${a.x} ${a.y}L${end.x} ${end.y}L${b.x} ${b.y}" ` +
+        `<path d="${arrowPathData(points)}M${a.x} ${a.y}L${end.x} ${end.y}L${b.x} ${b.y}" ` +
         `fill="none" stroke="${stroke}" stroke-width="${width}"/>`
       )
     }

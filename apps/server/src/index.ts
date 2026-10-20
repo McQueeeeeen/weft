@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { createLogger, isLevel } from './logger.ts'
 import { FilePersistence } from './persistence.ts'
+import { RedisBus } from './redis.ts'
 import { startServer } from './server.ts'
 
 const env = process.env
@@ -10,6 +11,7 @@ const server = await startServer({
   port: Number(env.PORT ?? 8080),
   host: env.HOST ?? '0.0.0.0',
   persistence: new FilePersistence(resolve(env.DATA_DIR ?? 'data')),
+  bus: env.REDIS_URL ? new RedisBus(env.REDIS_URL, logger) : undefined,
   staticDir: env.STATIC_DIR ? resolve(env.STATIC_DIR) : null,
   logger,
 })

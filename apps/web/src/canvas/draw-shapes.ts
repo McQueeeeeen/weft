@@ -6,8 +6,9 @@ import {
   STICKY_FONT_SIZE,
   STICKY_PADDING,
   STROKE_WIDTH,
-  arrowEndpoints,
   arrowHead,
+  arrowPathData,
+  arrowPoints,
   penPathData,
   type Shape,
   type ShapeLookup,
@@ -99,18 +100,17 @@ export function drawShape(dc: DrawContext, shape: Shape): void {
     }
 
     case 'arrow': {
-      const { start, end } = arrowEndpoints(shape, dc.lookup)
+      const points = arrowPoints(shape, dc.lookup)
+      const end = points[points.length - 1]!
       const width = STROKE_WIDTH[shape.size]
-      const [a, b] = arrowHead(start, end, width)
+      const [a, b] = arrowHead(points[points.length - 2]!, end, width)
       ctx.lineWidth = width
       ctx.strokeStyle = colors.stroke
-      ctx.beginPath()
-      ctx.moveTo(start.x, start.y)
-      ctx.lineTo(end.x, end.y)
-      ctx.moveTo(a.x, a.y)
-      ctx.lineTo(end.x, end.y)
-      ctx.lineTo(b.x, b.y)
-      ctx.stroke()
+      const path = new Path2D(arrowPathData(points))
+      path.moveTo(a.x, a.y)
+      path.lineTo(end.x, end.y)
+      path.lineTo(b.x, b.y)
+      ctx.stroke(path)
       return
     }
 

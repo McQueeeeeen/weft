@@ -2,50 +2,12 @@ import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { WebsocketProvider } from 'y-websocket'
 import * as Y from 'yjs'
 import { FilePersistence, MemoryPersistence } from './persistence.ts'
-import { startServer, type RunningServer, type ServerOptions } from './server.ts'
+import { startServer } from './server.ts'
+import { cleanup, cleanups, connect, start, waitFor } from './test-utils.ts'
 
-const cleanups: (() => Promise<void> | void)[] = []
-
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()!()
-})
-
-async function start(options: Partial<ServerOptions> = {}): Promise<RunningServer> {
-  const server = await startServer({
-    port: 0,
-    host: '127.0.0.1',
-    persistence: new MemoryPersistence(),
-    saveDebounceMs: 10,
-    unloadDelayMs: 20,
-    ...options,
-  })
-  cleanups.push(() => server.close())
-  return server
-}
-
-function connect(server: RunningServer, room: string, endpoint = 'ws') {
-  const doc = new Y.Doc()
-  const provider = new WebsocketProvider(`ws://127.0.0.1:${server.port}/${endpoint}`, room, doc, {
-    WebSocketPolyfill: WebSocket,
-    disableBc: true,
-  })
-  cleanups.push(() => {
-    provider.destroy()
-    doc.destroy()
-  })
-  return { doc, provider, map: doc.getMap<number>('test') }
-}
-
-async function waitFor(check: () => boolean, timeoutMs = 3000): Promise<void> {
-  const start = Date.now()
-  while (!check()) {
-    if (Date.now() - start > timeoutMs) throw new Error('timed out waiting for condition')
-    await new Promise((r) => setTimeout(r, 10))
-  }
-}
+afterEach(cleanup)
 
 describe('sync server', () => {
   it('relays document updates between clients in the same room', async () => {

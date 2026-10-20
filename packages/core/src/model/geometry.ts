@@ -15,6 +15,7 @@ import {
   moveToward,
   pointInEllipse,
 } from '../geometry/intersect.ts'
+import { elbowRoute } from '../geometry/route.ts'
 import type { Vec } from '../geometry/vec.ts'
 import {
   FRAME_TITLE_GAP,
@@ -31,6 +32,7 @@ export type ShapeLookup = (id: string) => Shape | undefined
 
 export const ARROW_GAP = 6
 export const ARROWHEAD_SIZE = 14
+export const ELBOW_MARGIN = 28
 
 export const boxOf = (shape: BoxShape): Box => boxFromRect(shape.x, shape.y, shape.w, shape.h)
 
@@ -47,7 +49,31 @@ function clipToShapeOutline(shape: BoxShape, toward: Vec): Vec {
     : clipToBoxOutline(box, toward)
 }
 
+const routes = new WeakMap<ArrowShape, { key: string; points: Vec[] }>()
+
+export function arrowPoints(arrow: ArrowShape, lookup: ShapeLookup): Vec[] {
+  if (arrow.route === 'straight') {
+    const { start, end } = straightEndpoints(arrow, lookup)
+    return [start, end]
+  }
+  const startShape = boundTarget(arrow.start, lookup)
+  const endShape = boundTarget(arrow.end, lookup)
+  const a = { point: { x: arrow.x1, y: arrow.y1 }, box: startShape ? boxOf(startShape) : null }
+  const b = { point: { x: arrow.x2, y: arrow.y2 }, box: endShape ? boxOf(endShape) : null }
+  const key = JSON.stringify([a, b])
+  const cached = routes.get(arrow)
+  if (cached?.key === key) return cached.points
+  const points = elbowRoute(a, b, ARROW_GAP, ELBOW_MARGIN)
+  routes.set(arrow, { key, points })
+  return points
+}
+
 export function arrowEndpoints(arrow: ArrowShape, lookup: ShapeLookup): { start: Vec; end: Vec } {
+  const points = arrowPoints(arrow, lookup)
+  return { start: points[0]!, end: points[points.length - 1]! }
+}
+
+function straightEndpoints(arrow: ArrowShape, lookup: ShapeLookup): { start: Vec; end: Vec } {
   const startShape = boundTarget(arrow.start, lookup)
   const endShape = boundTarget(arrow.end, lookup)
   const rawStart = { x: arrow.x1, y: arrow.y1 }
@@ -67,8 +93,8 @@ export function arrowEndpoints(arrow: ArrowShape, lookup: ShapeLookup): { start:
 export function shapeBounds(shape: Shape, lookup: ShapeLookup): Box {
   switch (shape.type) {
     case 'arrow': {
-      const { start, end } = arrowEndpoints(shape, lookup)
-      return boxExpand(boxFromPoints(start, end), ARROWHEAD_SIZE + STROKE_WIDTH[shape.size])
+      const points = arrowPoints(shape, lookup)
+      return boxExpand(boxOfPoints(points), ARROWHEAD_SIZE + STROKE_WIDTH[shape.size])
     }
     case 'pen':
       return boxExpand(boxOf(shape), STROKE_WIDTH[shape.size] / 2)
@@ -113,8 +139,9 @@ export function hitTestShape(
     case 'ellipse':
       return pointInEllipse(p, boxExpand(boxOf(shape), tolerance))
     case 'arrow': {
-      const { start, end } = arrowEndpoints(shape, lookup)
-      return distanceToSegment(p, start, end) <= tolerance + STROKE_WIDTH[shape.size] / 2
+      const points = arrowPoints(shape, lookup)
+      const reach = tolerance + STROKE_WIDTH[shape.size] / 2
+      return points.some((a, i) => i > 0 && distanceToSegment(p, points[i - 1]!, a) <= reach)
     }
     case 'pen': {
       const reach = tolerance + STROKE_WIDTH[shape.size] / 2
@@ -186,3 +213,13 @@ function normalizedBox(x1: number, y1: number, x2: number, y2: number) {
     h: Math.abs(y2 - y1),
   }
 }
+
+export const boxOfPoints = (points: readonly Vec[]): Box =>
+  points.reduce((b, p) => boxUnionPoint(b, p), boxFromPoints(points[0]!, points[0]!))
+
+const boxUnionPoint = (b: Box, p: Vec): Box => ({
+  minX: Math.min(b.minX, p.x),
+  minY: Math.min(b.minY, p.y),
+  maxX: Math.max(b.maxX, p.x),
+  maxY: Math.max(b.maxY, p.y),
+})
