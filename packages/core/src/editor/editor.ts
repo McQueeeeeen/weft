@@ -401,7 +401,7 @@ export class Editor {
     }
     if (e.button !== 0) return
 
-    this.history.stopCapturing()
+    this.history.hold()
     switch (this._tool) {
       case 'select':
         return this.selectPointerDown(e, world)
@@ -604,6 +604,11 @@ export class Editor {
   }
 
   pointerUp(e: PointerInput): void {
+    this.endGesture(e)
+    this.history.stopCapturing()
+  }
+
+  private endGesture(e: PointerInput): void {
     if (e.pointerType === 'touch') {
       this.touches.delete(e.pointerId)
       if (this.gesture.kind === 'pinching') {

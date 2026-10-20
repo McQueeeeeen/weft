@@ -91,7 +91,7 @@ export function Landing() {
           <h2 id="inside-title">Built from the document model up</h2>
           <p className="inside-lead">
             No whiteboard framework underneath. Every piece below is written for this project and
-            covered by 120 automated tests.
+            covered by 130 automated tests.
           </p>
           <div className="inside-grid">
             <article className="feature">

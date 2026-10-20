@@ -100,7 +100,7 @@ pnpm bench
 ```
 
 - Strict TypeScript (`noUncheckedIndexedAccess`, `erasableSyntaxOnly`), type-aware ESLint
-- 113 unit and integration tests, 87% line coverage of core and server; the server is
+- 123 unit and integration tests, 87% line coverage of core and server; the server is
   tested with real y-websocket clients
 - 7 end-to-end tests covering realtime sync, presence, per-user undo, persistence, the sample board
   and the home page

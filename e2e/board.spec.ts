@@ -1,11 +1,17 @@
-import { expect, test, type Browser, type Page } from '@playwright/test'
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
 
 const summary = (page: Page) => page.getByTestId('board-summary')
 
 const newBoard = () => `/b/e2e${Math.random().toString(36).slice(2, 10)}`
 
+const contexts: BrowserContext[] = []
+
+test.afterEach(() => Promise.all(contexts.splice(0).map((context) => context.close())))
+
 async function openBoard(browser: Browser, path = newBoard()): Promise<Page> {
-  const page = await (await browser.newContext()).newPage()
+  const context = await browser.newContext()
+  contexts.push(context)
+  const page = await context.newPage()
   await page.goto(path)
   await expect(page.locator('.connection[data-state="online"]')).toBeVisible()
   return page

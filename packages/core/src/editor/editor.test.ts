@@ -15,6 +15,19 @@ describe('Editor', () => {
       expect(editor.selection).toEqual([shape!.id])
     })
 
+    it('undoes a drawn shape in one step even if the drag paused', async () => {
+      const editor = createEditor()
+      editor.setTool('rect')
+      const p = pointer(editor)
+      p.down(0, 0)
+      p.move(50, 50)
+      await new Promise((resolve) => setTimeout(resolve, 450))
+      p.move(100, 100)
+      p.up(100, 100)
+      editor.undo()
+      expect(editor.board.size).toBe(0)
+    })
+
     it('draws from any corner and constrains to a square with shift', () => {
       const editor = createEditor()
       editor.setTool('ellipse')

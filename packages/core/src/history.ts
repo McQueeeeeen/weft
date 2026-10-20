@@ -2,6 +2,7 @@ import * as Y from 'yjs'
 import type { Board } from './model/board.ts'
 
 const SELECTION_META = 'selection'
+const CAPTURE_MS = 400
 
 interface SelectionAccess {
   get: () => readonly string[]
@@ -24,7 +25,7 @@ export class History {
     this.selection = selection
     this.manager = new Y.UndoManager(board.doc.getMap('shapes'), {
       trackedOrigins: new Set([board.origin]),
-      captureTimeout: 400,
+      captureTimeout: CAPTURE_MS,
     })
     board.doc.on('beforeTransaction', this.onBeforeTransaction)
     board.doc.on('afterTransaction', this.onAfterTransaction)
@@ -64,6 +65,12 @@ export class History {
 
   stopCapturing(): void {
     this.manager.stopCapturing()
+    this.manager.captureTimeout = CAPTURE_MS
+  }
+
+  hold(): void {
+    this.manager.stopCapturing()
+    this.manager.captureTimeout = Infinity
   }
 
   subscribe(listener: () => void): () => void {
