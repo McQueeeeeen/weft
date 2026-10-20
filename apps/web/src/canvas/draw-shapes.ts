@@ -55,12 +55,17 @@ export function drawShape(dc: DrawContext, shape: Shape): void {
     }
 
     case 'sticky': {
-      ctx.fillStyle = theme.name === 'light' ? 'rgba(29, 27, 24, 0.10)' : 'rgba(0, 0, 0, 0.35)'
-      ctx.fillRect(shape.x + 1, shape.y + 3, shape.w, shape.h)
+      ctx.save()
+      if (dc.zoom > 0.4) {
+        ctx.shadowColor = theme.name === 'light' ? 'rgba(20, 22, 26, 0.16)' : 'rgba(0, 0, 0, 0.5)'
+        ctx.shadowBlur = 14 * dc.zoom
+        ctx.shadowOffsetY = 4 * dc.zoom
+      }
       ctx.fillStyle = colors.sticky
       ctx.beginPath()
-      ctx.roundRect(shape.x, shape.y, shape.w, shape.h, 2)
+      ctx.roundRect(shape.x, shape.y, shape.w, shape.h, 3)
       ctx.fill()
+      ctx.restore()
       if (shape.id !== dc.editingId && shape.text) {
         const lines = wrapText(shape.text, shape.w - STICKY_PADDING * 2, STICKY_FONT_SIZE)
         drawLines(

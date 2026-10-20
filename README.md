@@ -32,6 +32,9 @@ docker compose up --build
 - Copy and paste between boards, duplicate, reorder, nudge, keyboard shortcuts (`?`)
 - Pinch zoom and pan on touch devices
 - PNG and SVG export of the selection or the whole board
+- Every person picks a thread color that becomes their accent: selection, handles,
+  cursor and avatar look the same on every screen
+- Empty boards offer a sample and a one-click second window to see collaboration
 - Light and dark themes; shape colors are stored as tokens so each viewer sees a palette
   that suits their theme
 
@@ -97,7 +100,7 @@ pnpm bench
 - Strict TypeScript (`noUncheckedIndexedAccess`, `erasableSyntaxOnly`), type-aware ESLint
 - 113 unit and integration tests, 87% line coverage of core and server; the server is
   tested with real y-websocket clients
-- 5 end-to-end tests covering realtime sync, presence, per-user undo and persistence
+- 6 end-to-end tests covering realtime sync, presence, per-user undo, persistence and the sample board
 - CI runs all of the above plus a container build and health check
 
 ## Limitations

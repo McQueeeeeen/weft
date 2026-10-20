@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-sans": "5.3.0",
+    "@fontsource-variable/onest": "5.3.1",
     "@weft/core": "workspace:*",
     "react": "19.3.1",
     "react-dom": "19.3.1",

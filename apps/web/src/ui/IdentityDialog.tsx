@@ -1,6 +1,6 @@
 import { MAX_NAME_LENGTH, PRESENCE_COLOR_COUNT, type PresenceUser } from '@weft/core'
 import { useState } from 'react'
-import { presenceColor } from '../canvas/palette.ts'
+import { thread } from '../canvas/palette.ts'
 import { Dialog } from './Dialog.tsx'
 
 interface IdentityDialogProps {
@@ -58,9 +58,9 @@ function IdentityForm({ user, onSave }: { user: PresenceUser; onSave: (u: Presen
                 name="presence-color"
                 checked={color === i}
                 onChange={() => setColor(i)}
-                aria-label={presenceColor(i).name}
+                aria-label={thread(i).name}
               />
-              <span style={{ background: presenceColor(i).fill }} />
+              <span style={{ background: thread(i).fill }} />
             </label>
           ))}
         </div>

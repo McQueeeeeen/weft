@@ -73,3 +73,10 @@ test('opens the shortcut list from the keyboard', async ({ browser }) => {
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
 })
+
+test('fills an empty board from the sample', async ({ browser }) => {
+  const page = await openBoard(browser, '/')
+  await page.getByRole('button', { name: 'Start from a sample' }).click()
+  await expect(summary(page)).toHaveText(/^6 objects/)
+  await expect(page.getByRole('heading', { name: 'An empty board' })).toBeHidden()
+})

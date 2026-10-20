@@ -24,7 +24,7 @@ function exportedShapes(editor: Editor): Shape[] {
 export function boardToSvg(editor: Editor, theme: Theme): Blob | null {
   const svg = exportSvg(exportedShapes(editor), editor.board.lookup, {
     color: (token, role) => theme.content[token][role],
-    background: theme.paper,
+    background: theme.board,
     fontFamily: BOARD_FONT,
     wrapText,
     padding: PADDING,
@@ -44,7 +44,7 @@ export async function boardToPng(editor: Editor, theme: Theme, scale = 2): Promi
   canvas.width = Math.ceil(boxWidth(frame) * k)
   canvas.height = Math.ceil(boxHeight(frame) * k)
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = theme.paper
+  ctx.fillStyle = theme.board
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.setTransform(k, 0, 0, k, -frame.minX * k, -frame.minY * k)
   ctx.lineCap = 'round'

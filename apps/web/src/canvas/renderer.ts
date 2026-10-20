@@ -10,10 +10,10 @@ import {
   worldToScreen,
 } from '@weft/core'
 import { drawShape } from './draw-shapes.ts'
-import { presenceColor, type Theme } from './palette.ts'
+import { BOARD_FONT, thread, withAlpha, type Theme } from './palette.ts'
 
-const GRID_STEP = 24
-const MIN_GRID_PX = 14
+const GRID_STEP = 32
+const MIN_GRID_PX = 24
 const CURSOR_EASE = 0.35
 
 export interface RenderStats {
@@ -96,7 +96,7 @@ export class Renderer {
     const cam = editor.camera
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.fillStyle = theme.paper
+    ctx.fillStyle = theme.board
     ctx.fillRect(0, 0, this.width, this.height)
     this.drawGrid()
 
@@ -130,9 +130,12 @@ export class Renderer {
       tile.width = px
       tile.height = px
       const t = tile.getContext('2d')!
-      t.fillStyle = this.theme.dot
-      const dot = Math.max(1, Math.round(1.5 * this.dpr))
-      t.fillRect(0, 0, dot, dot)
+      t.fillStyle = this.theme.grid
+      const line = Math.max(1, Math.round(this.dpr))
+      const arm = Math.round(2.5 * this.dpr)
+      const c = Math.floor(px / 2)
+      t.fillRect(c - arm, c, arm * 2 + line, line)
+      t.fillRect(c, c - arm, line, arm * 2 + line)
       this.gridTile = { key, pattern: ctx.createPattern(tile, 'repeat')! }
     }
     const offsetX = (-cam.x * cam.z * this.dpr) % size
@@ -149,7 +152,7 @@ export class Renderer {
 
   private drawOwnSelection(): void {
     const { ctx, editor, theme } = this
-    const accent = theme.accent
+    const accent = thread(editor.presence?.user.color ?? 0).fill
 
     const hovered = editor.hovered
     if (hovered && !editor.selection.includes(hovered)) {
@@ -179,7 +182,7 @@ export class Renderer {
       ctx.beginPath()
       if (handle === 'start' || handle === 'end') ctx.arc(point.x, point.y, 5, 0, Math.PI * 2)
       else ctx.rect(point.x - 4.5, point.y - 4.5, 9, 9)
-      ctx.fillStyle = theme.name === 'light' ? '#FFFFFF' : '#17181A'
+      ctx.fillStyle = theme.surface
       ctx.fill()
       ctx.lineWidth = 1.5
       ctx.strokeStyle = accent
@@ -189,7 +192,7 @@ export class Renderer {
     const marquee = editor.marquee
     if (marquee) {
       const box = this.toScreen(marquee)
-      ctx.fillStyle = theme.accentWash
+      ctx.fillStyle = withAlpha(accent, 0.08)
       ctx.fillRect(box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY)
       ctx.strokeStyle = accent
       ctx.lineWidth = 1
@@ -200,7 +203,7 @@ export class Renderer {
   private drawPeerSelections(peers: readonly Peer[]): void {
     for (const peer of peers) {
       if (peer.selection.length === 0) continue
-      const color = presenceColor(peer.user.color)
+      const color = thread(peer.user.color)
       let top: Vec | null = null
       for (const id of peer.selection) {
         const shape = this.editor.board.get(id)
@@ -239,7 +242,7 @@ export class Renderer {
       }
 
       const p = worldToScreen(this.editor.camera, track)
-      const color = presenceColor(peer.user.color)
+      const color = thread(peer.user.color)
       ctx.save()
       ctx.translate(p.x, p.y)
       ctx.beginPath()
@@ -266,15 +269,15 @@ export class Renderer {
 
   private drawTag(text: string, x: number, y: number, color: { fill: string; text: string }): void {
     const { ctx } = this
-    ctx.font = '500 12px "IBM Plex Sans", system-ui, sans-serif'
-    const w = ctx.measureText(text).width + 12
+    ctx.font = `600 12px ${BOARD_FONT}`
+    const w = ctx.measureText(text).width + 14
     ctx.fillStyle = color.fill
     ctx.beginPath()
-    ctx.roundRect(x, y, w, 20, 4)
+    ctx.roundRect(x, y, w, 20, 10)
     ctx.fill()
     ctx.fillStyle = color.text
     ctx.textBaseline = 'middle'
-    ctx.fillText(text, x + 6, y + 10.5)
+    ctx.fillText(text, x + 7, y + 10.5)
     ctx.textBaseline = 'alphabetic'
   }
 

@@ -1,4 +1,5 @@
 import type { Editor } from '@weft/core'
+import { insertSample } from '../app/sample.ts'
 import { useEffect, useState } from 'react'
 import { useEditor } from '../app/hooks.ts'
 
@@ -29,13 +30,28 @@ export function BoardStatus({ editor, loaded }: { editor: Editor; loaded: boolea
         </p>
       )}
       {loaded && count === 0 && tool === 'select' && (
-        <div className="board-hint">
-          <p className="board-hint-title">This board is empty</p>
-          <p>
-            Press <kbd>S</kbd> for a sticky note, <kbd>R</kbd> for a rectangle, or double-click
-            anywhere to write. Share the link to work on it together.
+        <section className="welcome panel" aria-labelledby="welcome-title">
+          <h1 id="welcome-title">An empty board</h1>
+          <p>Everything drawn here is shared live with anyone who has the link.</p>
+          <div className="welcome-actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() =>
+                window.open(location.href, '_blank', 'popup,width=960,height=720,left=80,top=80')
+              }
+            >
+              Open a second window
+            </button>
+            <button type="button" className="secondary" onClick={() => insertSample(editor)}>
+              Start from a sample
+            </button>
+          </div>
+          <p className="welcome-keys">
+            Or press <kbd>S</kbd> for a sticky note, <kbd>R</kbd> for a rectangle, or double-click
+            to write.
           </p>
-        </div>
+        </section>
       )}
     </>
   )

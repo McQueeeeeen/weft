@@ -1,7 +1,7 @@
 import type { Presence } from '@weft/core'
 import { useState, useSyncExternalStore } from 'react'
 import { usePeople } from '../app/hooks.ts'
-import { presenceColor } from '../canvas/palette.ts'
+import { thread } from '../canvas/palette.ts'
 import { initials } from '../collab/identity.ts'
 import type { Session, SessionStatus } from '../collab/session.ts'
 import { MoreIcon } from './icons.tsx'
@@ -112,6 +112,6 @@ function People({ presence, onRename }: { presence: Presence; onRename: () => vo
 }
 
 function avatarStyle(color: number): React.CSSProperties {
-  const c = presenceColor(color)
+  const c = thread(color)
   return { background: c.fill, color: c.text }
 }

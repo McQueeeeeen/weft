@@ -1,6 +1,7 @@
 import type { PresenceUser } from '@weft/core'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { boardToPng, boardToSvg, download } from '../canvas/export.ts'
+import { thread } from '../canvas/palette.ts'
 import type { Renderer } from '../canvas/renderer.ts'
 import { saveIdentity } from '../collab/identity.ts'
 import type { Session } from '../collab/session.ts'
@@ -35,6 +36,16 @@ export function App({ session }: { session: Session }) {
   const [renderer, setRenderer] = useState<Renderer | null>(null)
   const [dialog, setDialog] = useState<'shortcuts' | 'identity' | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const myColor = useSyncExternalStore(
+    (onChange) => presence.subscribe(onChange),
+    () => presence.user.color,
+  )
+
+  useEffect(() => {
+    const { fill, text } = thread(myColor)
+    document.documentElement.style.setProperty('--thread', fill)
+    document.documentElement.style.setProperty('--on-thread', text)
+  }, [myColor])
 
   useEffect(() => {
     if (!toast) return
