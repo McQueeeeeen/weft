@@ -1,103 +1,53 @@
-import { cameraToFit, panBy, screenToWorld, viewportBox, zoomAt, type Camera } from '../camera.ts'
 import {
-  boxContainsBox,
-  boxContainsPoint,
-  boxExpand,
-  boxFromPoints,
-  boxTranslate,
-  boxUnionAll,
-  type Box,
-} from '../geometry/box.ts'
-import { simplifyPolyline } from '../geometry/simplify.ts'
+  cameraToFit,
+  clampZoom,
+  panBy,
+  screenToWorld,
+  viewportBox,
+  zoomAt,
+  type Camera,
+} from '../camera.ts'
+import { boxExpand, boxUnionAll, type Box } from '../geometry/box.ts'
 import { dist, mid, type Vec } from '../geometry/vec.ts'
 import { History } from '../history.ts'
 import type { Board } from '../model/board.ts'
-import {
-  arrowEndpoints,
-  arrowPoints,
-  boxOf,
-  boxOfPoints,
-  resizePatch,
-  translatePatch,
-} from '../model/geometry.ts'
-import {
-  FONT_SIZE,
-  STICKY_SIZE,
-  hasFill,
-  hasText,
-  type Shape,
-  type ShapePatch,
-} from '../model/shapes.ts'
+import { translatePatch } from '../model/geometry.ts'
+import { FONT_SIZE, hasFill, hasText, type Shape, type ShapePatch } from '../model/shapes.ts'
 import type { Presence } from '../presence.ts'
 import { deserializeShapes, serializeShapes } from './clipboard.ts'
-import { resizeEdges, snapBox, type Guide } from './snap.ts'
 import {
-  cursorForHandle,
-  handleAt,
-  resizeBox,
-  selectionHandles,
-  type HandlePosition,
-} from './handles.ts'
+  HANDLE_RADIUS,
+  IDLE,
+  NO_OVERLAY,
+  gesture,
+  panning,
+  selectDown,
+  tolerance,
+  type Gesture,
+  type Overlay,
+} from './gestures.ts'
+import { cursorForHandle, handleAt, selectionHandles, type HandlePosition } from './handles.ts'
+import { frameOf } from './queries.ts'
+import { runShortcut } from './shortcuts.ts'
+import type { Guide } from './snap.ts'
+import { createText, startTool, type ToolHost } from './tools.ts'
 import {
   DEFAULT_STYLE,
-  TOOL_SHORTCUTS,
-  type ArrowHandle,
   type CursorKind,
   type KeyInput,
   type PointerInput,
-  type ResizeHandle,
   type Style,
   type ToolId,
   type WheelInput,
 } from './types.ts'
 
-type Gesture =
-  | { kind: 'idle' }
-  | { kind: 'panning'; last: Vec }
-  | { kind: 'pinching'; startDistance: number; startZoom: number; anchorWorld: Vec }
-  | {
-      kind: 'pointing-shape'
-      startScreen: Vec
-      startWorld: Vec
-      id: string
-      toggleOnUp: boolean
-      clearOnClick: boolean
-      duplicate: boolean
-    }
-  | { kind: 'pointing-canvas'; startScreen: Vec; startWorld: Vec; additive: boolean }
-  | {
-      kind: 'translating'
-      startWorld: Vec
-      origins: Shape[]
-      startBox: Box | null
-      targets: readonly Box[]
-    }
-  | { kind: 'marquee'; startWorld: Vec; base: readonly string[] }
-  | {
-      kind: 'resizing'
-      handle: ResizeHandle
-      startWorld: Vec
-      startFrame: Box
-      origins: Shape[]
-      targets: readonly Box[]
-    }
-  | { kind: 'moving-arrow-end'; id: string; which: ArrowHandle; origin: Shape }
-  | { kind: 'creating'; id: string; startWorld: Vec }
-  | { kind: 'drawing-arrow'; id: string; startWorld: Vec }
-  | { kind: 'drawing-pen'; id: string; points: number[]; lastFlush: number }
+interface Pinch {
+  readonly startDistance: number
+  readonly startZoom: number
+  readonly anchorWorld: Vec
+}
 
-const IDLE: Gesture = { kind: 'idle' }
-
-const DRAG_THRESHOLD = { fine: 3, coarse: 8 }
-const HIT_TOLERANCE = { fine: 4, coarse: 12 }
-const HANDLE_RADIUS = { fine: 8, coarse: 18 }
-
-const DEFAULT_BOX = { w: 160, h: 100 }
-const DEFAULT_FRAME = { w: 640, h: 420 }
-const PEN_FLUSH_MS = 32
-const SNAP_DISTANCE = 6
-const NUDGE = 1
-const NUDGE_LARGE = 10
+const PINCHING = gesture('pinching')
 const ZOOM_STEP = 1.25
 const PASTE_OFFSET = 24
 
@@ -119,15 +69,15 @@ export class Editor {
   private _selection: readonly string[] = []
   private _hovered: string | null = null
   private _editing: string | null = null
-  private _marquee: Box | null = null
-  private _bindTarget: string | null = null
-  private _guides: readonly Guide[] = []
+  private _overlay: Overlay = NO_OVERLAY
   private _style: Style = DEFAULT_STYLE
   private _spaceHeld = false
   private _cursor: CursorKind = 'default'
   private _version = 0
 
   private gesture: Gesture = IDLE
+  private pinch: Pinch | null = null
+  private readonly host: ToolHost
   private readonly touches = new Map<number, Vec>()
   private pointerType: PointerInput['pointerType'] = 'mouse'
   private pasteCount = 0
@@ -146,6 +96,7 @@ export class Editor {
       get: () => this._selection,
       restore: (ids) => this.select(ids),
     })
+    this.host = Editor.createHost(this)
     this.disposers.push(
       board.subscribe((change) => {
         if (change.removed.size > 0) {
@@ -182,19 +133,19 @@ export class Editor {
     return this._editing
   }
   get marquee(): Box | null {
-    return this._marquee
+    return this._overlay.marquee
   }
   get bindTarget(): string | null {
-    return this._bindTarget
+    return this._overlay.bindTarget
   }
   get guides(): readonly Guide[] {
-    return this._guides
+    return this._overlay.guides
   }
   get cursor(): CursorKind {
     return this._cursor
   }
   get isInteracting(): boolean {
-    return this.gesture.kind !== 'idle'
+    return this.gesture !== IDLE
   }
 
   selectedShapes(): Shape[] {
@@ -213,7 +164,7 @@ export class Editor {
   }
 
   selectionFrame(): Box | null {
-    return boxUnionAll(this.selectedShapes().map((s) => this.frameOf(s)))
+    return boxUnionAll(this.selectedShapes().map((s) => frameOf(s, this.board.lookup)))
   }
 
   handles(): HandlePosition[] {
@@ -437,326 +388,46 @@ export class Editor {
     this.presence?.setCursor(world)
 
     if (e.button === 1 || this._tool === 'hand' || this._spaceHeld) {
-      this.gesture = { kind: 'panning', last: e.point }
-      this._cursor = 'grabbing'
-      return this.changed()
+      return this.host.begin(panning(this.host, e.point))
     }
     if (e.button !== 0) return
 
     this.history.hold()
-    switch (this._tool) {
-      case 'select':
-        return this.selectPointerDown(e, world)
-      case 'frame': {
-        const count = this.board.all().filter((s) => s.type === 'frame').length
-        const id = this.board.create({
-          type: 'frame',
-          x: world.x,
-          y: world.y,
-          w: 0,
-          h: 0,
-          title: `Frame ${count + 1}`,
-          color: 'ink',
-        })
-        this.select([id])
-        this.gesture = { kind: 'creating', id, startWorld: world }
-        return this.changed()
-      }
-      case 'rect':
-      case 'ellipse': {
-        const { color, fill, size } = this._style
-        const id = this.board.create({
-          type: this._tool,
-          x: world.x,
-          y: world.y,
-          w: 0,
-          h: 0,
-          color,
-          fill,
-          size,
-        })
-        this.select([id])
-        this.gesture = { kind: 'creating', id, startWorld: world }
-        return this.changed()
-      }
-      case 'sticky': {
-        const color = this._style.color === 'ink' ? 'yellow' : this._style.color
-        const half = STICKY_SIZE / 2
-        const id = this.board.create({
-          type: 'sticky',
-          x: world.x - half,
-          y: world.y - half,
-          w: STICKY_SIZE,
-          h: STICKY_SIZE,
-          color,
-          text: '',
-        })
-        return this.startEditing(id)
-      }
-      case 'text':
-        return this.createText(world)
-      case 'arrow': {
-        const target = this.bindableAt(world)
-        const { color, size, route } = this._style
-        const id = this.board.create({
-          type: 'arrow',
-          x1: world.x,
-          y1: world.y,
-          x2: world.x,
-          y2: world.y,
-          start: target?.id ?? null,
-          end: null,
-          color,
-          size,
-          route,
-        })
-        this.select([id])
-        this.gesture = { kind: 'drawing-arrow', id, startWorld: world }
-        return this.changed()
-      }
-      case 'pen': {
-        const { color, size } = this._style
-        const id = this.board.create({
-          type: 'pen',
-          x: world.x,
-          y: world.y,
-          w: 0,
-          h: 0,
-          points: [0, 0],
-          color,
-          size,
-        })
-        this.gesture = {
-          kind: 'drawing-pen',
-          id,
-          points: [world.x, world.y],
-          lastFlush: this.now(),
-        }
-        return this.changed()
-      }
-    }
+    this.host.begin(
+      this._tool === 'select'
+        ? selectDown(this.host, e, world)
+        : startTool(this.host, this._tool, world),
+    )
   }
 
   pointerMove(e: PointerInput): void {
     if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) {
       this.touches.set(e.pointerId, e.point)
-      if (this.gesture.kind === 'pinching') return this.updatePinch()
+      if (this.pinch) return this.updatePinch(this.pinch)
     }
     const world = this.screenToWorld(e.point)
     this.presence?.setCursor(world)
-    const g = this.gesture
-
-    switch (g.kind) {
-      case 'idle':
-        return this.updateHover(e.point, world)
-      case 'pinching':
-        return
-      case 'panning': {
-        this._camera = panBy(this._camera, e.point.x - g.last.x, e.point.y - g.last.y)
-        this.gesture = { kind: 'panning', last: e.point }
-        return this.changed()
-      }
-      case 'pointing-shape': {
-        if (this.readOnly || !this.pastThreshold(g.startScreen, e.point)) return
-        if (g.duplicate) this.duplicateInPlace()
-        const origins = this.withFrameContents(this.selectedShapes())
-        this.gesture = {
-          kind: 'translating',
-          startWorld: g.startWorld,
-          origins,
-          startBox: boxUnionAll(origins.filter((o) => o.type !== 'arrow').map(boxOf)),
-          targets: this.snapTargets(origins),
-        }
-        this._cursor = 'move'
-        return this.pointerMove(e)
-      }
-      case 'pointing-canvas': {
-        if (!this.pastThreshold(g.startScreen, e.point)) return
-        this.gesture = {
-          kind: 'marquee',
-          startWorld: g.startWorld,
-          base: g.additive ? this._selection : [],
-        }
-        return this.pointerMove(e)
-      }
-      case 'translating': {
-        let dx = world.x - g.startWorld.x
-        let dy = world.y - g.startWorld.y
-        if (e.shift) {
-          if (Math.abs(dx) > Math.abs(dy)) dy = 0
-          else dx = 0
-        }
-        const snap =
-          g.startBox && !e.shift && !e.mod
-            ? snapBox(boxTranslate(g.startBox, dx, dy), g.targets, SNAP_DISTANCE / this._camera.z)
-            : null
-        dx += snap?.dx ?? 0
-        dy += snap?.dy ?? 0
-        this._guides = snap?.guides ?? []
-        this.board.transact(() => {
-          for (const shape of g.origins) this.board.update(shape.id, translatePatch(shape, dx, dy))
-        })
-        return this.changed()
-      }
-      case 'marquee': {
-        const box = boxFromPoints(g.startWorld, world)
-        this._marquee = box
-        const inside = this.board
-          .queryBox(box)
-          .filter((s) => boxContainsBox(box, this.frameOf(s)))
-          .map((s) => s.id)
-        this.select([...g.base, ...inside])
-        return this.changed()
-      }
-      case 'resizing': {
-        let dx = world.x - g.startWorld.x
-        let dy = world.y - g.startWorld.y
-        const snap =
-          e.shift || e.mod
-            ? null
-            : snapBox(
-                resizeBox(g.startFrame, g.handle, dx, dy, false),
-                g.targets,
-                SNAP_DISTANCE / this._camera.z,
-                resizeEdges(g.handle),
-              )
-        dx += snap?.dx ?? 0
-        dy += snap?.dy ?? 0
-        this._guides = snap?.guides ?? []
-        const frame = resizeBox(g.startFrame, g.handle, dx, dy, e.shift)
-        this.board.transact(() => {
-          for (const shape of g.origins)
-            this.board.update(shape.id, resizePatch(shape, g.startFrame, frame))
-        })
-        return this.changed()
-      }
-      case 'moving-arrow-end': {
-        const arrow = this.board.get(g.id)
-        if (arrow?.type !== 'arrow') return
-        const other = g.which === 'start' ? arrow.end : arrow.start
-        const target = this.bindableAt(world, other)
-        this._bindTarget = target?.id ?? null
-        this.board.update(
-          g.id,
-          g.which === 'start'
-            ? { x1: world.x, y1: world.y, start: this._bindTarget }
-            : { x2: world.x, y2: world.y, end: this._bindTarget },
-        )
-        return this.changed()
-      }
-      case 'creating': {
-        let w = world.x - g.startWorld.x
-        let h = world.y - g.startWorld.y
-        if (e.shift) {
-          const side = Math.max(Math.abs(w), Math.abs(h))
-          w = side * Math.sign(w || 1)
-          h = side * Math.sign(h || 1)
-        }
-        this.board.update(g.id, {
-          x: Math.min(g.startWorld.x, g.startWorld.x + w),
-          y: Math.min(g.startWorld.y, g.startWorld.y + h),
-          w: Math.abs(w),
-          h: Math.abs(h),
-        })
-        return
-      }
-      case 'drawing-arrow': {
-        const arrow = this.board.get(g.id)
-        if (arrow?.type !== 'arrow') return
-        const target = this.bindableAt(world, arrow.start)
-        this._bindTarget = target?.id ?? null
-        this.board.update(g.id, { x2: world.x, y2: world.y, end: this._bindTarget })
-        return this.changed()
-      }
-      case 'drawing-pen': {
-        g.points.push(world.x, world.y)
-        if (this.now() - g.lastFlush >= PEN_FLUSH_MS) {
-          this.flushPen(g.id, g.points)
-          g.lastFlush = this.now()
-        }
-        return
-      }
-    }
+    if (this.gesture === IDLE) this.updateHover(e.point, world)
+    else this.gesture.move(e, world)
   }
 
   pointerUp(e: PointerInput): void {
-    this.endGesture(e)
-    this.history.stopCapturing()
-  }
-
-  private endGesture(e: PointerInput): void {
     if (e.pointerType === 'touch') {
       this.touches.delete(e.pointerId)
-      if (this.gesture.kind === 'pinching') {
-        if (this.touches.size === 0) this.gesture = IDLE
+      if (this.pinch) {
+        if (this.touches.size === 0) {
+          this.pinch = null
+          this.gesture = IDLE
+        }
         return
       }
     }
     const g = this.gesture
     this.gesture = IDLE
-    this._bindTarget = null
-    this._guides = []
-
-    switch (g.kind) {
-      case 'idle':
-      case 'pinching':
-        return
-      case 'panning':
-        this._cursor = this.idleCursor()
-        return this.changed()
-      case 'pointing-shape':
-        if (g.clearOnClick) this.select([])
-        else if (g.toggleOnUp) this.select(this._selection.filter((id) => id !== g.id))
-        else if (!e.shift) this.select([g.id])
-        return this.changed()
-      case 'pointing-canvas':
-        if (!g.additive) this.select([])
-        return this.changed()
-      case 'marquee':
-        this._marquee = null
-        return this.changed()
-      case 'translating':
-      case 'resizing':
-      case 'moving-arrow-end':
-        this.history.stopCapturing()
-        this._cursor = this.idleCursor()
-        return this.changed()
-      case 'creating': {
-        const shape = this.board.get(g.id)
-        const minSize = DRAG_THRESHOLD.fine / this._camera.z
-        if (shape && shape.type !== 'arrow' && shape.w < minSize && shape.h < minSize) {
-          const box = shape.type === 'frame' ? DEFAULT_FRAME : DEFAULT_BOX
-          this.board.update(g.id, {
-            x: g.startWorld.x - box.w / 2,
-            y: g.startWorld.y - box.h / 2,
-            ...box,
-          })
-        }
-        if (shape?.type === 'frame') this.board.sendToBack([g.id])
-        this.history.stopCapturing()
-        this._tool = 'select'
-        this._cursor = 'default'
-        return this.changed()
-      }
-      case 'drawing-arrow': {
-        const arrow = this.board.get(g.id)
-        if (arrow?.type === 'arrow') {
-          const { start, end } = arrowEndpoints(arrow, this.board.lookup)
-          if (dist(start, end) < (DRAG_THRESHOLD.coarse * 2) / this._camera.z)
-            this.board.delete([g.id])
-        }
-        this.history.stopCapturing()
-        this._tool = 'select'
-        this._cursor = 'default'
-        return this.changed()
-      }
-      case 'drawing-pen': {
-        const simplified = simplifyPolyline(g.points, 0.75 / this._camera.z)
-        this.flushPen(g.id, simplified)
-        this.history.stopCapturing()
-        return this.changed()
-      }
-    }
+    this._overlay = NO_OVERLAY
+    g.up(e)
+    this.history.stopCapturing()
+    this.changed()
   }
 
   pointerLeave(): void {
@@ -770,36 +441,18 @@ export class Editor {
   doubleClick(e: PointerInput): void {
     if (this.readOnly || this._tool !== 'select') return
     const world = this.screenToWorld(e.point)
-    const hit = this.board.shapeAt(world, this.tolerance())
+    const hit = this.board.shapeAt(world, tolerance(this.host))
     if (hit && (hasText(hit) || hit.type === 'frame')) return this.startEditing(hit.id)
-    if (!hit) this.createText(world)
+    if (!hit) createText(this.host, world)
   }
 
   cancel(): void {
     const g = this.gesture
     this.gesture = IDLE
-    this._marquee = null
-    this._bindTarget = null
-    this._guides = []
+    this.pinch = null
+    this._overlay = NO_OVERLAY
     this.touches.clear()
-    switch (g.kind) {
-      case 'translating':
-      case 'resizing':
-        this.board.transact(() => {
-          for (const shape of g.origins) this.board.update(shape.id, geometryOf(shape))
-        })
-        break
-      case 'moving-arrow-end':
-        this.board.update(g.id, geometryOf(g.origin))
-        break
-      case 'creating':
-      case 'drawing-arrow':
-      case 'drawing-pen':
-        this.board.delete([g.id])
-        break
-      default:
-        break
-    }
+    g.cancel()
     this.history.stopCapturing()
     this._cursor = this.idleCursor()
     this.changed()
@@ -818,102 +471,19 @@ export class Editor {
   keyDown(e: KeyInput): boolean {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
     if (this._editing) {
-      if (key === 'Escape') {
-        this.stopEditing()
-        return true
-      }
-      return false
+      if (key !== 'Escape') return false
+      this.stopEditing()
+      return true
     }
-
-    if (e.mod) {
-      switch (key) {
-        case 'z':
-          if (e.shift) this.redo()
-          else this.undo()
-          return true
-        case 'y':
-          this.redo()
-          return true
-        case 'a':
-          this.selectAll()
-          return true
-        case 'd':
-          this.duplicateSelected()
-          return true
-        case '=':
-        case '+':
-          this.zoomIn()
-          return true
-        case '-':
-          this.zoomOut()
-          return true
-        case '0':
-          this.resetZoom()
-          return true
-        default:
-          return false
+    if (key === ' ' && !e.mod) {
+      if (!this._spaceHeld) {
+        this._spaceHeld = true
+        this._cursor = 'grab'
+        this.changed()
       }
+      return true
     }
-
-    switch (key) {
-      case ' ':
-        if (!this._spaceHeld) {
-          this._spaceHeld = true
-          this._cursor = 'grab'
-          this.changed()
-        }
-        return true
-      case 'Escape':
-        if (this.gesture.kind !== 'idle') this.cancel()
-        else if (this._tool !== 'select') this.setTool('select')
-        else this.select([])
-        return true
-      case 'Delete':
-      case 'Backspace':
-        this.deleteSelected()
-        return true
-      case 'Enter': {
-        const only = this.selectedShapes()
-        if (only.length === 1 && hasText(only[0]!)) {
-          this.startEditing(only[0].id)
-          return true
-        }
-        return false
-      }
-      case 'ArrowLeft':
-      case 'ArrowRight':
-      case 'ArrowUp':
-      case 'ArrowDown': {
-        if (this._selection.length === 0) return false
-        const step = e.shift ? NUDGE_LARGE : NUDGE
-        const dx = key === 'ArrowLeft' ? -step : key === 'ArrowRight' ? step : 0
-        const dy = key === 'ArrowUp' ? -step : key === 'ArrowDown' ? step : 0
-        this.nudge(dx, dy)
-        return true
-      }
-      case ']':
-        this.bringToFront()
-        return true
-      case '[':
-        this.sendToBack()
-        return true
-      case '!':
-      case '1':
-        if (!e.shift) return false
-        this.zoomToFit()
-        return true
-      case '@':
-      case '2':
-        if (!e.shift) return false
-        this.zoomToSelection()
-        return true
-      default: {
-        const tool = TOOL_SHORTCUTS[key]
-        if (!tool || e.alt) return false
-        this.setTool(tool)
-        return true
-      }
-    }
+    return runShortcut(this, e, key)
   }
 
   keyUp(e: KeyInput): void {
@@ -924,101 +494,56 @@ export class Editor {
     }
   }
 
-  private selectPointerDown(e: PointerInput, world: Vec): void {
-    const handle = handleAt(this.handles(), e.point, HANDLE_RADIUS[this.precision()])
-    if (handle === 'start' || handle === 'end') {
-      const origin = this.selectedShapes()[0]!
-      this.gesture = { kind: 'moving-arrow-end', id: origin.id, which: handle, origin }
-      this._cursor = 'move'
-      return this.changed()
+  private static createHost(editor: Editor): ToolHost {
+    return {
+      board: editor.board,
+      history: editor.history,
+      get camera() {
+        return editor._camera
+      },
+      get view() {
+        return viewportBox(editor._camera, editor._viewport.width, editor._viewport.height)
+      },
+      get selection() {
+        return editor._selection
+      },
+      get readOnly() {
+        return editor.readOnly
+      },
+      get precision() {
+        return editor.pointerType === 'touch' ? 'coarse' : 'fine'
+      },
+      get style() {
+        return editor._style
+      },
+      now: () => editor.now(),
+      begin: (gesture) => {
+        editor.gesture = gesture
+        editor.changed()
+      },
+      pan: (dx, dy) => editor.setCamera(panBy(editor._camera, dx, dy)),
+      select: (ids) => editor.select(ids),
+      selectedShapes: () => editor.selectedShapes(),
+      selectionFrame: () => editor.selectionFrame(),
+      handles: () => editor.handles(),
+      overlay: (patch) => {
+        editor._overlay = { ...editor._overlay, ...patch }
+        editor.changed()
+      },
+      cursor: (kind) => {
+        editor._cursor = kind ?? editor.idleCursor()
+        editor.changed()
+      },
+      finishTool: () => {
+        editor._tool = 'select'
+        editor._cursor = 'default'
+      },
+      duplicateInPlace: () => {
+        const text = editor.copy()
+        if (text) editor.insertClipboard(text, { offset: { x: 0, y: 0 } })
+      },
+      startEditing: (id) => editor.startEditing(id),
     }
-    if (handle) {
-      this.gesture = {
-        kind: 'resizing',
-        handle,
-        startWorld: world,
-        startFrame: this.selectionFrame()!,
-        origins: this.selectedShapes(),
-        targets: this.snapTargets(this.selectedShapes()),
-      }
-      this._cursor = cursorForHandle(handle)
-      return this.changed()
-    }
-
-    const hit = this.board.shapeAt(world, this.tolerance())
-    if (hit) {
-      const wasSelected = this._selection.includes(hit.id)
-      if (!wasSelected) this.select(e.shift ? [...this._selection, hit.id] : [hit.id])
-      this.gesture = {
-        kind: 'pointing-shape',
-        startScreen: e.point,
-        startWorld: world,
-        id: hit.id,
-        toggleOnUp: wasSelected && e.shift,
-        clearOnClick: false,
-        duplicate: e.alt,
-      }
-      return this.changed()
-    }
-
-    const frame = this._selection.length > 1 ? this.selectionFrame() : null
-    if (frame && !e.shift && boxContainsPoint(frame, world)) {
-      this.gesture = {
-        kind: 'pointing-shape',
-        startScreen: e.point,
-        startWorld: world,
-        id: this._selection[0]!,
-        toggleOnUp: false,
-        clearOnClick: true,
-        duplicate: e.alt,
-      }
-      return this.changed()
-    }
-
-    if (!e.shift) this.select([])
-    this.gesture = {
-      kind: 'pointing-canvas',
-      startScreen: e.point,
-      startWorld: world,
-      additive: e.shift,
-    }
-    this.changed()
-  }
-
-  private withFrameContents(shapes: Shape[]): Shape[] {
-    const ids = new Set(shapes.map((s) => s.id))
-    const result = [...shapes]
-    for (const frame of shapes) {
-      if (frame.type !== 'frame') continue
-      const box = boxOf(frame)
-      for (const inner of this.board.queryBox(box)) {
-        if (ids.has(inner.id) || !boxContainsBox(box, this.frameOf(inner))) continue
-        ids.add(inner.id)
-        result.push(inner)
-      }
-    }
-    return result
-  }
-
-  private createText(world: Vec): void {
-    const { color, size } = this._style
-    const h = FONT_SIZE[size] * 1.3
-    const id = this.board.create({
-      type: 'text',
-      x: world.x,
-      y: world.y - h / 2,
-      w: 1,
-      h,
-      color,
-      size,
-      text: '',
-    })
-    this.startEditing(id)
-  }
-
-  private duplicateInPlace(): void {
-    const text = this.copy()
-    if (text) this.insertClipboard(text, { offset: { x: 0, y: 0 } })
   }
 
   private insertClipboard(text: string, placement: { center: Vec } | { offset: Vec }): boolean {
@@ -1032,30 +557,15 @@ export class Editor {
     return true
   }
 
-  private flushPen(id: string, absolute: readonly number[]): void {
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    for (let i = 0; i < absolute.length; i += 2) {
-      minX = Math.min(minX, absolute[i]!)
-      maxX = Math.max(maxX, absolute[i]!)
-      minY = Math.min(minY, absolute[i + 1]!)
-      maxY = Math.max(maxY, absolute[i + 1]!)
-    }
-    const points = absolute.map((v, i) => (i % 2 === 0 ? v - minX : v - minY))
-    this.board.update(id, { x: minX, y: minY, w: maxX - minX, h: maxY - minY, points })
-  }
-
   private startPinch(): void {
-    if (this.gesture.kind !== 'idle' && this.gesture.kind !== 'pinching') {
+    if (this.gesture !== IDLE) {
       const touches = new Map(this.touches)
       this.cancel()
       for (const [id, p] of touches) this.touches.set(id, p)
     }
     const [a, b] = [...this.touches.values()] as [Vec, Vec]
-    this.gesture = {
-      kind: 'pinching',
+    this.gesture = PINCHING
+    this.pinch = {
       startDistance: Math.max(1, dist(a, b)),
       startZoom: this._camera.z,
       anchorWorld: this.screenToWorld(mid(a, b)),
@@ -1063,13 +573,16 @@ export class Editor {
     this.changed()
   }
 
-  private updatePinch(): void {
-    const g = this.gesture
-    if (g.kind !== 'pinching' || this.touches.size < 2) return
+  private updatePinch(pinch: Pinch): void {
+    if (this.touches.size < 2) return
     const [a, b] = [...this.touches.values()] as [Vec, Vec]
     const center = mid(a, b)
-    const z = Math.min(8, Math.max(0.1, g.startZoom * (dist(a, b) / g.startDistance)))
-    this._camera = { x: g.anchorWorld.x - center.x / z, y: g.anchorWorld.y - center.y / z, z }
+    const z = clampZoom(pinch.startZoom * (dist(a, b) / pinch.startDistance))
+    this._camera = {
+      x: pinch.anchorWorld.x - center.x / z,
+      y: pinch.anchorWorld.y - center.y / z,
+      z,
+    }
     this.changed()
   }
 
@@ -1077,9 +590,9 @@ export class Editor {
     let hovered: string | null = null
     let cursor = this.idleCursor()
     if (this._tool === 'select' && !this._spaceHeld) {
-      const handle = handleAt(this.handles(), screen, HANDLE_RADIUS[this.precision()])
+      const handle = handleAt(this.handles(), screen, HANDLE_RADIUS[this.host.precision])
       if (handle) cursor = cursorForHandle(handle)
-      else hovered = this.board.shapeAt(world, this.tolerance())?.id ?? null
+      else hovered = this.board.shapeAt(world, tolerance(this.host))?.id ?? null
       if (hovered) cursor = 'move'
     }
     if (hovered !== this._hovered || cursor !== this._cursor) {
@@ -1089,45 +602,11 @@ export class Editor {
     }
   }
 
-  private bindableAt(world: Vec, exclude?: string | null): Shape | undefined {
-    return this.board.shapeAt(
-      world,
-      this.tolerance(),
-      (s) => s.type !== 'arrow' && s.type !== 'pen' && s.id !== exclude,
-    )
-  }
-
-  private snapTargets(moving: readonly Shape[]): Box[] {
-    const skip = new Set(moving.map((s) => s.id))
-    const { width, height } = this._viewport
-    return this.board
-      .queryBox(viewportBox(this._camera, width, height))
-      .flatMap((s) => (s.type === 'arrow' || skip.has(s.id) ? [] : [boxOf(s)]))
-  }
-
-  private frameOf(shape: Shape): Box {
-    return shape.type === 'arrow'
-      ? boxOfPoints(arrowPoints(shape, this.board.lookup))
-      : boxOf(shape)
-  }
-
   private idleCursor(): CursorKind {
     if (this._spaceHeld || this._tool === 'hand') return 'grab'
     if (this._tool === 'text') return 'text'
     if (this._tool === 'select') return 'default'
     return 'crosshair'
-  }
-
-  private precision(): 'fine' | 'coarse' {
-    return this.pointerType === 'touch' ? 'coarse' : 'fine'
-  }
-
-  private tolerance(): number {
-    return HIT_TOLERANCE[this.precision()] / this._camera.z
-  }
-
-  private pastThreshold(a: Vec, b: Vec): boolean {
-    return dist(a, b) >= DRAG_THRESHOLD[this.precision()]
   }
 
   private viewportCenter(): Vec {
@@ -1158,22 +637,4 @@ function stylePatch(shape: Shape, patch: Partial<Style>): ShapePatch {
     }
   }
   return out
-}
-
-function geometryOf(shape: Shape): ShapePatch {
-  switch (shape.type) {
-    case 'arrow':
-      return {
-        x1: shape.x1,
-        y1: shape.y1,
-        x2: shape.x2,
-        y2: shape.y2,
-        start: shape.start,
-        end: shape.end,
-      }
-    case 'pen':
-      return { x: shape.x, y: shape.y, w: shape.w, h: shape.h, points: shape.points }
-    default:
-      return { x: shape.x, y: shape.y, w: shape.w, h: shape.h }
-  }
 }
