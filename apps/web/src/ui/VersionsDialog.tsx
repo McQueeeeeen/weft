@@ -1,6 +1,7 @@
 import { Board } from '@weft/core'
 import { useEffect, useState } from 'react'
 import * as Y from 'yjs'
+import { ago } from '../app/time.ts'
 import type { Session } from '../collab/session.ts'
 import { Dialog } from './Dialog.tsx'
 
@@ -11,16 +12,6 @@ interface Version {
 
 type State =
   { status: 'loading' } | { status: 'error' } | { status: 'ready'; versions: readonly Version[] }
-
-const time = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-
-function ago(at: number): string {
-  const minutes = Math.round((at - Date.now()) / 60_000)
-  if (Math.abs(minutes) < 60) return time.format(minutes, 'minute')
-  const hours = Math.round(minutes / 60)
-  if (Math.abs(hours) < 24) return time.format(hours, 'hour')
-  return time.format(Math.round(hours / 24), 'day')
-}
 
 interface VersionsDialogProps {
   readonly open: boolean
