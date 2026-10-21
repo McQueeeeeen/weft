@@ -10,6 +10,7 @@ import {
   boxOf,
   worldToScreen,
 } from '@weft/core'
+import { drawPeerCarets } from './carets.ts'
 import { drawShape } from './draw-shapes.ts'
 import { onImageLoad } from './images.ts'
 import { BOARD_FONT, thread, withAlpha, type Theme } from './palette.ts'
@@ -115,6 +116,7 @@ export class Renderer {
     const peers = editor.presence?.peers() ?? []
     this.drawPeerSelections(peers)
     this.drawOwnSelection()
+    drawPeerCarets(ctx, editor, peers)
     const moving = this.drawPeerCursors(peers)
 
     this.recordFrame(started, shapes.length)

@@ -5,12 +5,15 @@ import { thread } from '../canvas/palette.ts'
 import type { Renderer } from '../canvas/renderer.ts'
 import { saveIdentity } from '../collab/identity.ts'
 import type { Session } from '../collab/session.ts'
+import { ReplayView } from '../replay/ReplayView.tsx'
 import { BoardCanvas } from '../ui/BoardCanvas.tsx'
 import { BoardMenu } from '../ui/BoardMenu.tsx'
 import { BoardStatus } from '../ui/BoardStatus.tsx'
+import { CommentsLayer } from '../ui/CommentsLayer.tsx'
 import { HistoryControls, ZoomControls } from '../ui/CornerControls.tsx'
 import { DebugHud } from '../ui/DebugHud.tsx'
 import { IdentityDialog } from '../ui/IdentityDialog.tsx'
+import { Minimap } from '../ui/Minimap.tsx'
 import { ShortcutsDialog } from '../ui/ShortcutsDialog.tsx'
 import { StylePanel } from '../ui/StylePanel.tsx'
 import { Toolbar } from '../ui/Toolbar.tsx'
@@ -37,14 +40,18 @@ export function App({ session }: { session: Session }) {
     hasSelection: e.selection.length > 0,
   }))
   const [renderer, setRenderer] = useState<Renderer | null>(null)
-  const [dialog, setDialog] = useState<'shortcuts' | 'identity' | 'versions' | null>(null)
+  const [dialog, setDialog] = useState<'shortcuts' | 'identity' | 'versions' | 'replay' | null>(
+    null,
+  )
   const [following, setFollowing] = useFollow(editor, presence)
   const { readOnly } = session
   const [toast, setToast] = useState<string | null>(null)
-  const myColor = useSyncExternalStore(
+  const [minimap, setMinimap] = useState(() => matchMedia('(min-width: 769px)').matches)
+  const me = useSyncExternalStore(
     (onChange) => presence.subscribe(onChange),
-    () => presence.user.color,
+    () => presence.user,
   )
+  const myColor = me.color
 
   useEffect(() => {
     const { fill, text } = thread(myColor)
@@ -91,6 +98,7 @@ export function App({ session }: { session: Session }) {
         onNotice={setToast}
       />
       <BoardStatus editor={editor} loaded={status.loaded} readOnly={readOnly} />
+      <CommentsLayer editor={editor} author={me} />
       <FollowBanner presence={presence} following={following} onStop={() => setFollowing(null)} />
       <TopBar
         session={session}
@@ -106,13 +114,15 @@ export function App({ session }: { session: Session }) {
             onExport={(format) => void exportBoard(format)}
             onShortcuts={openShortcuts}
             onHistory={readOnly ? null : () => setDialog('versions')}
+            onReplay={() => setDialog('replay')}
           />
         }
       />
       {!readOnly && <StylePanel editor={editor} theme={theme} />}
       {!readOnly && <Toolbar editor={editor} />}
       {!readOnly && <HistoryControls editor={editor} />}
-      <ZoomControls editor={editor} />
+      {minimap && hasContent && <Minimap editor={editor} presence={presence} theme={theme} />}
+      <ZoomControls editor={editor} minimap={minimap} onMinimap={() => setMinimap((v) => !v)} />
       {debug && <DebugHud editor={editor} renderer={renderer} />}
 
       <div className="toast-region" role="status" aria-live="polite">
@@ -120,6 +130,9 @@ export function App({ session }: { session: Session }) {
       </div>
 
       <ShortcutsDialog open={dialog === 'shortcuts'} onClose={() => setDialog(null)} />
+      {dialog === 'replay' && (
+        <ReplayView session={session} theme={theme} onClose={() => setDialog(null)} />
+      )}
       <VersionsDialog
         open={dialog === 'versions'}
         session={session}

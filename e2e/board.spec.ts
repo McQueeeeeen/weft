@@ -174,3 +174,51 @@ test('two people typing in one note keep both edits', async ({ browser }) => {
   await expect(alice.getByLabel('Sticky note text')).toHaveValue('We Ship it! now')
   await expect(bob.getByLabel('Sticky note text')).toHaveValue('We Ship it! now')
 })
+
+test('replays how the board was built', async ({ browser }) => {
+  const page = await openBoard(browser)
+  await drawRect(page, [300, 300], [500, 420])
+  await drawRect(page, [700, 300], [800, 400])
+  await expect(summary(page)).toHaveText(/^2 objects/)
+
+  await page.getByRole('button', { name: 'Board menu' }).click()
+  await page.getByRole('menuitem', { name: 'Replay' }).click()
+  const replay = page.getByRole('dialog', { name: 'Replay' })
+  const slider = replay.getByRole('slider', { name: 'Timeline' })
+  await expect(slider).toBeVisible()
+  expect(Number(await slider.getAttribute('max'))).toBeGreaterThanOrEqual(2)
+  await expect(replay.getByTestId('replay-summary')).toHaveText(/^(\d+) of \1 edits · /)
+
+  await slider.fill('0')
+  await expect(replay.getByTestId('replay-summary')).toHaveText(/^0 of \d+ edits/)
+  await page.keyboard.press('Escape')
+  await expect(replay).toBeHidden()
+})
+
+test('comments reach collaborators and follow the shape they are on', async ({ browser }) => {
+  const alice = await openBoard(browser)
+  const bob = await openBoard(browser, new URL(alice.url()).pathname)
+  await alice.keyboard.press('s')
+  await alice.mouse.click(500, 360)
+  await alice.keyboard.press('Escape')
+  await alice.keyboard.press('Escape')
+
+  await alice.keyboard.press('c')
+  await alice.mouse.click(540, 340)
+  await alice.getByLabel('Add a comment').fill('Shorter, please')
+  await alice.keyboard.press('Enter')
+
+  const pin = bob.getByRole('button', { name: /^Comment by .*: Shorter, please$/ })
+  await pin.click()
+  await bob.getByLabel('Reply').fill('On it')
+  await bob.keyboard.press('Enter')
+  await expect(alice.getByRole('dialog', { name: 'Comment thread' })).toContainText('On it')
+
+  const before = await pin.boundingBox()
+  await alice.keyboard.press('Escape')
+  await alice.mouse.move(460, 400)
+  await alice.mouse.down()
+  await alice.mouse.move(660, 400, { steps: 5 })
+  await alice.mouse.up()
+  await expect.poll(async () => (await pin.boundingBox())!.x - before!.x).toBeCloseTo(200, 0)
+})

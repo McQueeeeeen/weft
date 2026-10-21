@@ -29,7 +29,12 @@ docker compose up --build
 - Rectangles, ellipses, sticky notes, text, freehand pen and arrows that stay attached to
   shapes as they move
 - Frames that group a section of the board and carry their contents when moved
-- Two people can type in the same note at once and both edits are kept
+- Two people can type in the same note at once and both edits are kept; you see where
+  each collaborator's caret and text selection are inside the note
+- Comments pinned to a shape or a spot on the board, with replies and resolve; a pin on a
+  shape moves with it
+- Board overview map with your view and every collaborator's view; click or drag it to
+  jump there
 - Elbow arrows that find their own path around the shapes they connect
 - Alignment guides: dragged and resized shapes snap to the edges and centers of their
   neighbours (hold Cmd or Ctrl to place freely)
@@ -38,6 +43,8 @@ docker compose up --build
 - View-only links: viewers see every change live, and the server drops any edit they send
 - Version history: the server snapshots each board every 10 minutes while it changes, and
   any snapshot can be restored as one undoable step
+- Replay: play a board back from empty to now with a scrubber and 1×, 4× or 16× speed;
+  idle gaps are shortened, so a week of edits plays in seconds
 - Live cursors, name tags and each person's selection
 - Per-user undo: undo reverts your own edits and never a collaborator's
 - Offline editing with IndexedDB; changes sync on reconnect without conflict dialogs
@@ -76,6 +83,13 @@ The editor has no DOM dependency. The web app forwards normalized pointer, wheel
 events and draws whatever state the editor exposes, so every interaction (drawing,
 dragging, resizing, binding arrows, pinch zoom, clipboard) is unit tested in Node.
 
+Inside the editor every pointer gesture (panning, marquee, moving, resizing, drawing a
+shape, an arrow or a pen stroke) is a small object with `move`, `up` and `cancel`
+(`editor/gestures.ts`). A gesture can hand over to the next one, so pressing on a shape
+becomes a move once the pointer passes the drag threshold. Tools only decide which
+gesture starts (`editor/tools.ts`), and keyboard shortcuts are a table of commands over
+the editor's public API (`editor/shortcuts.ts`).
+
 ## Engineering notes
 
 **Conflict-free sync.** The document is a Yjs CRDT with one map per shape. Two people
@@ -112,6 +126,11 @@ one note keep both edits, and the textarea keeps your caret on the same characte
 someone else types before it. Text editing uses a real textarea positioned over the
 shape, so IME, spellcheck and screen readers work.
 
+**Carets survive concurrent edits.** Where someone is typing is shared as a pair of Yjs
+relative positions, not character offsets, so a caret stays on the same character while
+others insert text before it. Each client maps it back through its own line wrapping to
+draw it.
+
 **Elbow arrows route with A\*.** The router builds a sparse orthogonal grid from the
 connected shapes' edges, searches it with A\* (path length plus a cost per bend) for
 every pair of sides, and keeps the cheapest route. Routes are cached per arrow and take
@@ -120,6 +139,15 @@ about 0.07 ms to compute, so dragging a shape re-routes its arrows every frame.
 **Snapping uses the spatial index.** At the start of a drag the editor collects the
 shapes in view once; each frame then compares three lines per axis against them and
 draws a guide for every line that matches.
+
+**Replay is an event log with checkpointed seeking.** Each room appends every update it
+receives from a client, with a timestamp, to a log saved in chunks alongside the snapshot.
+Updates relayed from other instances are not logged again, and updates within 50 ms are
+merged. Once a room has more than 500 chunks, the oldest half is folded into a base Yjs
+state, so the log stays bounded and a replay still ends exactly at the live document. The
+browser rebuilds the board in a private Yjs document and keeps a full-state checkpoint
+every 64 updates, so seeking anywhere restores the nearest checkpoint and applies fewer
+than 64 updates.
 
 ## Quality
 
@@ -130,11 +158,12 @@ pnpm bench
 ```
 
 - Strict TypeScript (`noUncheckedIndexedAccess`, `erasableSyntaxOnly`), type-aware ESLint
-- 149 unit and integration tests, 90% line coverage of core and server; the server is
+- 165 unit and integration tests, 90% line coverage of core and server; the server is
   tested with real y-websocket clients, including view-only sockets, version history, image
   uploads and two instances sharing a bus; the router is checked against 200 random layouts
-- 11 end-to-end tests covering realtime sync, presence, per-user undo, persistence, view-only
-  links, frames, follow mode, two people typing in one note, the sample board and the home page
+- 13 end-to-end tests covering realtime sync, presence, per-user undo, persistence, view-only
+  links, frames, follow mode, two people typing in one note, comments, replay, the sample
+  board and the home page
 - CI runs all of the above plus a container build and health check
 
 ## Limitations

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import * as Y from 'yjs'
+import { readReplay } from './log.ts'
 import type { Persistence } from './persistence.ts'
 
 export const ID = '[A-Za-z0-9_-]{1,64}'
@@ -18,6 +19,7 @@ const routes = {
   view: new RegExp(`^/api/rooms/(${ID})/view$`),
   versions: new RegExp(`^/api/rooms/(${ID})/versions$`),
   version: new RegExp(`^/api/rooms/(${ID})/versions/(\\d{1,16})$`),
+  replay: new RegExp(`^/api/(rooms|views)/(${ID})/replay$`),
 }
 
 export class HttpError extends Error {
@@ -36,7 +38,7 @@ export async function resolveView(
   return room ? new TextDecoder().decode(room) : null
 }
 
-export function createApi(persistence: Persistence) {
+export function createApi(persistence: Persistence, flush: (room: string) => Promise<void>) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const path = new URL(req.url ?? '/', 'http://local').pathname
     let match: RegExpExecArray | null
@@ -88,12 +90,14 @@ export function createApi(persistence: Persistence) {
     if (req.method === 'GET' && (match = routes.version.exec(path))) {
       const data = await persistence.get(`versions/${match[1]!}/${match[2]!}`)
       if (!data) throw new HttpError(404, 'Not found')
-      res.writeHead(200, {
-        'Content-Type': 'application/octet-stream',
-        'Cache-Control': 'no-store',
-      })
-      res.end(data)
-      return true
+      return binary(res, data)
+    }
+
+    if (req.method === 'GET' && (match = routes.replay.exec(path))) {
+      const room = match[1] === 'views' ? await resolveView(persistence, match[2]!) : match[2]!
+      if (!room) throw new HttpError(404, 'Not found')
+      await flush(room)
+      return binary(res, await readReplay(persistence, room))
     }
 
     return false
@@ -106,6 +110,12 @@ function countShapes(state: Uint8Array): number {
   const size = doc.getMap('shapes').size
   doc.destroy()
   return size
+}
+
+function binary(res: ServerResponse, data: Uint8Array): true {
+  res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' })
+  res.end(data)
+  return true
 }
 
 function json(res: ServerResponse, status: number, body: unknown): true {

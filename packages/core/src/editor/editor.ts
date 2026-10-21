@@ -11,6 +11,7 @@ import { boxExpand, boxUnionAll, type Box } from '../geometry/box.ts'
 import { dist, mid, type Vec } from '../geometry/vec.ts'
 import { History } from '../history.ts'
 import type { Board } from '../model/board.ts'
+import { Comments, type CommentAnchor, type CommentAuthor } from '../model/comments.ts'
 import { translatePatch } from '../model/geometry.ts'
 import { FONT_SIZE, hasFill, hasText, type Shape, type ShapePatch } from '../model/shapes.ts'
 import type { Presence } from '../presence.ts'
@@ -62,6 +63,7 @@ export class Editor {
   readonly board: Board
   readonly history: History
   readonly presence: Presence | null
+  readonly comments: Comments
 
   private _camera: Camera = { x: 0, y: 0, z: 1 }
   private _viewport = { width: 0, height: 0 }
@@ -70,6 +72,7 @@ export class Editor {
   private _hovered: string | null = null
   private _editing: string | null = null
   private _overlay: Overlay = NO_OVERLAY
+  private _draft: CommentAnchor | null = null
   private _style: Style = DEFAULT_STYLE
   private _spaceHeld = false
   private _cursor: CursorKind = 'default'
@@ -97,6 +100,7 @@ export class Editor {
       restore: (ids) => this.select(ids),
     })
     this.host = Editor.createHost(this)
+    this.comments = new Comments(board.doc)
     this.disposers.push(
       board.subscribe((change) => {
         if (change.removed.size > 0) {
@@ -140,6 +144,9 @@ export class Editor {
   }
   get guides(): readonly Guide[] {
     return this._overlay.guides
+  }
+  get commentDraft(): CommentAnchor | null {
+    return this._draft
   }
   get cursor(): CursorKind {
     return this._cursor
@@ -198,6 +205,7 @@ export class Editor {
   destroy(): void {
     for (const dispose of this.disposers) dispose()
     this.history.destroy()
+    this.comments.destroy()
     this.listeners.clear()
   }
 
@@ -217,6 +225,7 @@ export class Editor {
     if (this._tool === tool || (this.readOnly && tool !== 'select' && tool !== 'hand')) return
     this.cancel()
     this.stopEditing()
+    this._draft = null
     this._tool = tool
     if (tool !== 'select') this.select([])
     this._hovered = null
@@ -318,6 +327,24 @@ export class Editor {
     this.setCamera(cameraToFit(bounds, this._viewport.width, this._viewport.height))
   }
 
+  submitComment(text: string, author: CommentAuthor): string | null {
+    const draft = this._draft
+    if (!draft || this.readOnly || text.trim() === '') return null
+    const id = this.comments.create(draft, author, text.trim(), this.now())
+    this.setTool('select')
+    return id
+  }
+
+  cancelComment(): void {
+    if (this._tool === 'comment') this.setTool('select')
+  }
+
+  centerOn(point: Vec): void {
+    const { z } = this._camera
+    const { width, height } = this._viewport
+    this.setCamera({ x: point.x - width / 2 / z, y: point.y - height / 2 / z, z })
+  }
+
   zoomToSelection(): void {
     const bounds = this.board.boundsOfAll(this._selection)
     if (!bounds) return
@@ -340,10 +367,19 @@ export class Editor {
     this.board.update(id, { text, ...size })
   }
 
+  moveCaret(start: number, end: number): void {
+    const id = this._editing
+    if (id === null) return
+    const anchor = this.board.relativeCaret(id, start)
+    const head = this.board.relativeCaret(id, end)
+    this.presence?.setCaret(anchor && head ? { id, anchor, head } : null)
+  }
+
   stopEditing(): void {
     const id = this._editing
     if (id === null) return
     this._editing = null
+    this.presence?.setCaret(null)
     const shape = this.board.get(id)
     if (shape?.type === 'text' && shape.text.trim() === '') this.board.delete([id])
     this.history.stopCapturing()
@@ -543,6 +579,18 @@ export class Editor {
         if (text) editor.insertClipboard(text, { offset: { x: 0, y: 0 } })
       },
       startEditing: (id) => editor.startEditing(id),
+      draftComment: (at) => {
+        const shape = editor.board.shapeAt(at, tolerance(editor.host), (s) => s.type !== 'arrow')
+        const origin = shape && shape.type !== 'arrow' ? shape : null
+        editor._draft = {
+          x: at.x,
+          y: at.y,
+          shape: origin?.id ?? null,
+          dx: origin ? at.x - origin.x : 0,
+          dy: origin ? at.y - origin.y : 0,
+        }
+        editor.changed()
+      },
     }
   }
 

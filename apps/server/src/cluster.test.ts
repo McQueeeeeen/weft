@@ -4,7 +4,7 @@ import { MemoryBus, type Bus } from './bus.ts'
 import { MemoryPersistence } from './persistence.ts'
 import { RedisBus, encodeCommand, parseReply } from './redis.ts'
 import type { ServerOptions } from './server.ts'
-import { cleanup, cleanups, connect, sleep, start, waitFor } from './test-utils.ts'
+import { cleanup, cleanups, connect, replay, sleep, start, waitFor } from './test-utils.ts'
 
 afterEach(cleanup)
 
@@ -139,6 +139,22 @@ describe('multiple instances', () => {
     await waitFor(() => persistence.entries.has('rooms/versions'))
     await sleep(100)
     expect(await persistence.list('versions/versions')).toHaveLength(1)
+  })
+
+  it('logs each edit once, on the instance that received it', async () => {
+    const { a, b } = await cluster()
+    const x = connect(a, 'logged')
+    const y = connect(b, 'logged')
+    await waitFor(() => x.provider.synced && y.provider.synced)
+    x.map.set('x', 1)
+    await waitFor(() => y.map.get('x') === 1)
+    await sleep(70)
+    y.map.set('y', 2)
+    await waitFor(() => x.map.get('y') === 2)
+    await replay(b, 'logged')
+    const log = await replay(a, 'logged')
+    expect(log.sizes).toEqual([1, 2])
+    expect(log.map.toJSON()).toEqual(x.map.toJSON())
   })
 
   it('syncs instances through a Redis server', async () => {

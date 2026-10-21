@@ -10,6 +10,7 @@ import {
 import * as syncProtocol from 'y-protocols/sync'
 import * as Y from 'yjs'
 import type { Bus } from './bus.ts'
+import { compactLog, encodeEntries, logDir, seedLog, type LogEntry } from './log.ts'
 import type { Logger } from './logger.ts'
 import type { Persistence } from './persistence.ts'
 
@@ -19,6 +20,7 @@ export const MESSAGE_QUERY_AWARENESS = 3
 
 const PERSISTENCE_ORIGIN = 'persistence'
 const BUS_ORIGIN = 'bus'
+const MERGE_MS = 50
 
 export interface RoomOptions {
   readonly name: string
@@ -28,6 +30,7 @@ export interface RoomOptions {
   readonly saveMaxWaitMs: number
   readonly versionIntervalMs: number
   readonly maxVersions: number
+  readonly maxLogChunks: number
   readonly bus?: Bus
   readonly onDisconnect?: (room: Room) => void
 }
@@ -45,6 +48,7 @@ export class Room {
   private firstUnsavedAt: number | null = null
   private saving: Promise<void> = Promise.resolve()
   private unsubscribe: (() => void) | null = null
+  private log: LogEntry[] = []
 
   private constructor(options: RoomOptions) {
     this.options = options
@@ -56,7 +60,10 @@ export class Room {
   static async load(options: RoomOptions): Promise<Room> {
     const room = new Room(options)
     const state = await options.persistence.get(`rooms/${options.name}`)
-    if (state) Y.applyUpdate(room.doc, state, PERSISTENCE_ORIGIN)
+    if (state) {
+      Y.applyUpdate(room.doc, state, PERSISTENCE_ORIGIN)
+      await seedLog(options.persistence, options.name, state)
+    }
     room.doc.on('update', room.onDocUpdate)
     room.awareness.on('update', room.onAwarenessUpdate)
     if (options.bus) {
@@ -102,10 +109,16 @@ export class Room {
   private async save(): Promise<void> {
     const { persistence, versionIntervalMs, maxVersions } = this.options
     const key = `rooms/${this.name}`
+    const entries = this.log.splice(0)
     const stored = await persistence.get(key)
     if (stored) Y.applyUpdate(this.doc, stored, PERSISTENCE_ORIGIN)
     const state = Y.encodeStateAsUpdate(this.doc)
     await persistence.put(key, state)
+    if (entries.length > 0) {
+      const chunk = `${logDir(this.name)}/${entries[0]![0]}-${this.doc.clientID}`
+      await persistence.put(chunk, encodeEntries(entries))
+      await compactLog(persistence, this.name, this.options.maxLogChunks)
+    }
     const dir = `versions/${this.name}`
     const versions = (await persistence.list(dir)).map(Number).sort((a, b) => b - a)
     const now = Date.now()
@@ -191,7 +204,15 @@ export class Room {
     const message = encoding.toUint8Array(encoder)
     this.broadcast(message)
     if (origin !== BUS_ORIGIN) this.publish(message)
+    if (origin !== BUS_ORIGIN && origin !== PERSISTENCE_ORIGIN) this.record(update)
     this.scheduleSave()
+  }
+
+  private record(update: Uint8Array): void {
+    const at = Date.now()
+    const last = this.log.at(-1)
+    if (last && at - last[0] < MERGE_MS) last[1] = Y.mergeUpdates([last[1], update])
+    else this.log.push([at, update])
   }
 
   private readonly onAwarenessUpdate = (

@@ -101,4 +101,24 @@ describe('collaboration', () => {
     sync()
     expect(a.get(id)).toMatchObject({ type: 'sticky', text: 'older' })
   })
+
+  it('keeps a shared caret on the same character while others type before it', () => {
+    const { a, b, sync } = partitionedPair()
+    const id = a.create({
+      type: 'sticky',
+      x: 0,
+      y: 0,
+      w: 200,
+      h: 200,
+      text: 'Hello world',
+      color: 'yellow',
+    })
+    sync()
+    const caret = a.relativeCaret(id, 6)
+    b.update(id, { text: 'Oh, Hello world' })
+    sync()
+    expect(a.absoluteCaret(id, caret)).toBe(10)
+    expect(b.absoluteCaret(id, JSON.parse(JSON.stringify(caret)))).toBe(10)
+    expect(b.absoluteCaret(id, { item: 'nonsense' })).toBeNull()
+  })
 })

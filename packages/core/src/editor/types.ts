@@ -11,6 +11,7 @@ export const TOOLS = [
   'frame',
   'arrow',
   'pen',
+  'comment',
 ] as const
 export type ToolId = (typeof TOOLS)[number]
 
@@ -24,6 +25,7 @@ export const TOOL_SHORTCUTS: Record<string, ToolId> = {
   f: 'frame',
   a: 'arrow',
   p: 'pen',
+  c: 'comment',
 }
 
 export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'

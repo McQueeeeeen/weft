@@ -1,5 +1,6 @@
 import {
   ArrowUpRightIcon,
+  ChatCircleIcon,
   CircleIcon,
   CursorIcon,
   FrameCornersIcon,
@@ -24,6 +25,7 @@ const TOOL_ICONS: Record<ToolId, Icon> = {
   frame: FrameCornersIcon,
   arrow: ArrowUpRightIcon,
   pen: PencilSimpleIcon,
+  comment: ChatCircleIcon,
 }
 
 export const TOOL_LABELS: Record<ToolId, string> = {
@@ -36,12 +38,14 @@ export const TOOL_LABELS: Record<ToolId, string> = {
   frame: 'Frame',
   arrow: 'Arrow',
   pen: 'Pen',
+  comment: 'Comment',
 }
 
 const GROUPS: ToolId[][] = [
   ['select', 'hand'],
   ['rect', 'ellipse', 'sticky', 'text'],
   ['arrow', 'pen', 'frame'],
+  ['comment'],
 ]
 
 const SHORTCUT_FOR = Object.fromEntries(

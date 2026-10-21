@@ -2,6 +2,7 @@ import {
   ArrowUUpLeftIcon,
   ArrowUUpRightIcon,
   CornersOutIcon,
+  MapTrifoldIcon,
   MinusIcon,
   PlusIcon,
 } from '@phosphor-icons/react'
@@ -41,7 +42,15 @@ export function HistoryControls({ editor }: { editor: Editor }) {
   )
 }
 
-export function ZoomControls({ editor }: { editor: Editor }) {
+export function ZoomControls({
+  editor,
+  minimap,
+  onMinimap,
+}: {
+  editor: Editor
+  minimap: boolean
+  onMinimap: () => void
+}) {
   const zoom = useEditor(editor, (e) => Math.round(e.camera.z * 100))
   return (
     <div className="zoom-controls panel" role="group" aria-label="Zoom">
@@ -80,6 +89,16 @@ export function ZoomControls({ editor }: { editor: Editor }) {
         title="Fit board in view (Shift+1)"
       >
         <CornersOutIcon />
+      </button>
+      <button
+        type="button"
+        className="icon-button"
+        onClick={onMinimap}
+        aria-pressed={minimap}
+        aria-label="Board overview"
+        title="Board overview"
+      >
+        <MapTrifoldIcon />
       </button>
     </div>
   )

@@ -523,4 +523,28 @@ describe('Editor', () => {
       expect(editor.board.get(moving)).toMatchObject({ x: 310, y: 3 })
     })
   })
+
+  it('centers the view on a point without changing zoom', () => {
+    const editor = createEditor()
+    editor.setCamera({ x: 0, y: 0, z: 2 })
+    editor.centerOn({ x: 1000, y: 500 })
+    expect(editor.camera).toEqual({ x: 750, y: 300, z: 2 })
+    expect(editor.screenToWorld({ x: 500, y: 400 })).toEqual({ x: 1000, y: 500 })
+  })
+
+  it('places a comment on the shape under the pointer and posts it', () => {
+    const editor = createEditor()
+    const shape = editor.board.create(rect(0, 0, 100, 100))
+    editor.setTool('comment')
+    pointer(editor).click(40, 30)
+    expect(editor.commentDraft).toMatchObject({ shape, dx: 40, dy: 30 })
+    expect(editor.submitComment('   ', { name: 'Dana', color: 1 })).toBeNull()
+    const id = editor.submitComment('Rename this', { name: 'Dana', color: 1 })!
+    expect(editor.comments.get(id)!.messages[0]!.text).toBe('Rename this')
+    expect(editor.commentDraft).toBeNull()
+    expect(editor.tool).toBe('select')
+    expect(editor.history.canUndo).toBe(true)
+    editor.undo()
+    expect(editor.comments.get(id)).toBeDefined()
+  })
 })

@@ -22,6 +22,7 @@ export interface ServerOptions {
   readonly saveMaxWaitMs?: number
   readonly versionIntervalMs?: number
   readonly maxVersions?: number
+  readonly maxLogChunks?: number
   readonly unloadDelayMs?: number
   readonly heartbeatMs?: number
   readonly maxPayload?: number
@@ -41,7 +42,9 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const rooms = new Map<string, Promise<Room>>()
   const unloadTimers = new Map<string, NodeJS.Timeout>()
   const serveStatic = options.staticDir ? createStaticHandler(options.staticDir) : null
-  const api = createApi(options.persistence)
+  const api = createApi(options.persistence, async (name) => {
+    await (await rooms.get(name))?.flush()
+  })
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: options.maxPayload ?? 2 * 1024 * 1024,
@@ -81,6 +84,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
         saveMaxWaitMs: options.saveMaxWaitMs ?? 10_000,
         versionIntervalMs: options.versionIntervalMs ?? 10 * 60_000,
         maxVersions: options.maxVersions ?? 30,
+        maxLogChunks: options.maxLogChunks ?? 500,
         bus: options.bus,
         onDisconnect: scheduleUnload,
       })

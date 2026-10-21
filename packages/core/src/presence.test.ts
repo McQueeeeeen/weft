@@ -56,6 +56,21 @@ describe('Presence', () => {
     expect(bob.peers()[0]).toMatchObject({ view: { maxX: 800 }, cursor: { x: 5 } })
   })
 
+  it('shares where someone is typing and drops malformed carets', () => {
+    const { alice, bob } = pair()
+    alice.setCaret({ id: 'note', anchor: { assoc: 0 }, head: { assoc: 0 } })
+    vi.advanceTimersByTime(50)
+    expect(bob.peers()[0]!.caret).toMatchObject({ id: 'note' })
+    expect(
+      parsePresence({
+        user: { name: 'x', color: 1 },
+        cursor: null,
+        selection: [],
+        caret: { id: 3 },
+      })?.caret,
+    ).toBeNull()
+  })
+
   it('trims names', () => {
     const { alice, bob } = pair()
     alice.setUser({ name: `  ${'A'.repeat(100)}  `, color: 3 })

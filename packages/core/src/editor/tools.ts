@@ -15,6 +15,7 @@ import type { Style, ToolId } from './types.ts'
 export interface ToolHost extends Host {
   readonly style: Style
   startEditing(id: string): void
+  draftComment(at: Vec): void
 }
 
 export function createText(host: ToolHost, world: Vec): void {
@@ -89,6 +90,9 @@ export function startTool(
       host.select([id])
       return drawingArrow(host, id)
     }
+    case 'comment':
+      host.draftComment(world)
+      return IDLE
     case 'pen': {
       const id = board.create({ type: 'pen', ...box, points: [0, 0], color, size })
       return drawingPen(host, id, world)

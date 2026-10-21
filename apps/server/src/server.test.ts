@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import * as Y from 'yjs'
 import { FilePersistence, MemoryPersistence } from './persistence.ts'
 import { startServer } from './server.ts'
-import { cleanup, cleanups, connect, start, waitFor } from './test-utils.ts'
+import { cleanup, cleanups, connect, replay, sleep, start, waitFor } from './test-utils.ts'
 
 afterEach(cleanup)
 
@@ -219,6 +219,71 @@ describe('version history', () => {
     const restored = new Y.Doc()
     Y.applyUpdate(restored, new Uint8Array(await res.arrayBuffer()))
     expect(restored.getMap('shapes').size).toBe(2)
+  })
+})
+
+describe('replay log', () => {
+  const edit = async (map: Y.Map<number>, keys: string[]) => {
+    for (const key of keys) {
+      map.set(key, 1)
+      await sleep(70)
+    }
+  }
+
+  it('records client edits and serves them in order', async () => {
+    const server = await start()
+    const a = connect(server, 'log')
+    await waitFor(() => a.provider.synced)
+    await edit(a.map, ['one', 'two', 'three'])
+    const log = await replay(server, 'log')
+    expect(log.sizes).toEqual([1, 2, 3])
+    expect(log.times).toEqual([...log.times].sort((x, y) => x - y))
+    expect(log.map.toJSON()).toEqual(a.map.toJSON())
+  })
+
+  it('keeps the history across a room reload', async () => {
+    const persistence = new MemoryPersistence()
+    const first = await startServer({ port: 0, host: '127.0.0.1', persistence, saveDebounceMs: 10 })
+    const a = connect(first, 'reload')
+    await waitFor(() => a.provider.synced)
+    await edit(a.map, ['one', 'two'])
+    a.provider.destroy()
+    await first.close()
+
+    const second = await start({ persistence })
+    const b = connect(second, 'reload')
+    await waitFor(() => b.map.size === 2)
+    await edit(b.map, ['three'])
+    const log = await replay(second, 'reload')
+    expect(log.sizes).toEqual([1, 2, 3])
+    expect(persistence.entries.has('log-base/reload')).toBe(false)
+  })
+
+  it('folds old chunks into a base that still ends at the live state', async () => {
+    const persistence = new MemoryPersistence()
+    const server = await start({ persistence, maxLogChunks: 2 })
+    const a = connect(server, 'fold')
+    await waitFor(() => a.provider.synced)
+    await edit(a.map, ['one', 'two', 'three', 'four', 'five'])
+    a.map.delete('two')
+    const log = await replay(server, 'fold')
+    expect(persistence.entries.has('log-base/fold')).toBe(true)
+    expect((await persistence.list('log/fold')).length).toBeLessThanOrEqual(2)
+    expect(log.times.length).toBeLessThan(6)
+    expect(log.map.toJSON()).toEqual(a.map.toJSON())
+  })
+
+  it('starts the replay of an older board from its saved state', async () => {
+    const stored = new Y.Doc()
+    stored.getMap('test').set('old', 1)
+    const persistence = new MemoryPersistence()
+    persistence.entries.set('rooms/legacy', Y.encodeStateAsUpdate(stored))
+    const server = await start({ persistence })
+    const a = connect(server, 'legacy')
+    await waitFor(() => a.map.get('old') === 1)
+    await edit(a.map, ['new'])
+    const log = await replay(server, 'legacy')
+    expect(log.sizes).toEqual([2])
   })
 })
 

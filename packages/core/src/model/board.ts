@@ -92,6 +92,26 @@ export class Board {
     return this.bindings.get(id) ?? EMPTY_SET
   }
 
+  relativeCaret(id: string, index: number): unknown {
+    const text = this.root.get(id)?.get('text')
+    if (!(text instanceof Y.Text)) return null
+    return Y.relativePositionToJSON(Y.createRelativePositionFromTypeIndex(text, index))
+  }
+
+  absoluteCaret(id: string, caret: unknown): number | null {
+    const text = this.root.get(id)?.get('text')
+    if (!(text instanceof Y.Text) || typeof caret !== 'object' || caret === null) return null
+    try {
+      const position = Y.createAbsolutePositionFromRelativePosition(
+        Y.createRelativePositionFromJSON(caret),
+        this.doc,
+      )
+      return position?.type === text ? position.index : null
+    } catch {
+      return null
+    }
+  }
+
   transact<T>(fn: () => T): T {
     let result!: T
     this.doc.transact(() => {

@@ -8,7 +8,7 @@ import {
   shiftCaret,
   type Editor,
 } from '@weft/core'
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import type { Theme } from '../canvas/palette.ts'
 import { BOARD_FONT } from '../canvas/palette.ts'
 import { measureTextBlock } from '../canvas/text-layout.ts'
@@ -38,9 +38,13 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
   })
 
   const caret = useRef({ text: '', start: 0, end: 0 })
-  const remember = (el: HTMLTextAreaElement) => {
-    caret.current = { text: el.value, start: el.selectionStart, end: el.selectionEnd }
-  }
+  const remember = useCallback(
+    (el: HTMLTextAreaElement) => {
+      caret.current = { text: el.value, start: el.selectionStart, end: el.selectionEnd }
+      editor.moveCaret(el.selectionStart, el.selectionEnd)
+    },
+    [editor],
+  )
 
   const editingId = view?.id
   useEffect(() => {
@@ -49,7 +53,7 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
     el.focus({ preventScroll: true })
     el.setSelectionRange(el.value.length, el.value.length)
     remember(el)
-  }, [editingId])
+  }, [editingId, remember])
 
   const text = view?.text
   useLayoutEffect(() => {
@@ -59,7 +63,7 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
     if (before === text) return
     el.setSelectionRange(shiftCaret(before, text, start), shiftCaret(before, text, end))
     remember(el)
-  }, [text])
+  }, [text, remember])
 
   if (!view) return null
 
@@ -92,7 +96,6 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
       }}
       onSelect={(e) => remember(e.currentTarget)}
       onChange={(e) => {
-        remember(e.target)
         const text = e.target.value
         if (isFrame) {
           editor.updateText(view.id, text.replace(/\n/g, ' '))
@@ -102,6 +105,7 @@ export function TextEditor({ editor, theme }: { editor: Editor; theme: Theme }) 
         } else {
           editor.updateText(view.id, text)
         }
+        remember(e.target)
       }}
       onKeyDown={(e) => {
         const finish =

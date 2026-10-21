@@ -7,11 +7,18 @@ export interface PresenceUser {
   readonly color: number
 }
 
+export interface TextCaret {
+  readonly id: string
+  readonly anchor: unknown
+  readonly head: unknown
+}
+
 export interface PresenceState {
   readonly user: PresenceUser
   readonly cursor: Vec | null
   readonly selection: readonly string[]
   readonly view: Box | null
+  readonly caret: TextCaret | null
 }
 
 export interface Peer extends PresenceState {
@@ -25,7 +32,7 @@ const CURSOR_INTERVAL_MS = 40
 
 export class Presence {
   private peerCache: Peer[] | null = null
-  private pending: Partial<Pick<PresenceState, 'cursor' | 'view'>> = {}
+  private pending: Partial<Pick<PresenceState, 'cursor' | 'view' | 'caret'>> = {}
   private timer: ReturnType<typeof setTimeout> | null = null
   private lastSent = 0
   private readonly listeners = new Set<() => void>()
@@ -39,6 +46,7 @@ export class Presence {
       cursor: null,
       selection: [],
       view: null,
+      caret: null,
     } satisfies PresenceState)
     awareness.on('change', this.onChange)
   }
@@ -72,7 +80,11 @@ export class Presence {
     this.queue({ view })
   }
 
-  private queue(patch: Partial<Pick<PresenceState, 'cursor' | 'view'>>): void {
+  setCaret(caret: TextCaret | null): void {
+    this.queue({ caret })
+  }
+
+  private queue(patch: Partial<Pick<PresenceState, 'cursor' | 'view' | 'caret'>>): void {
     this.pending = { ...this.pending, ...patch }
     if (this.timer !== null) return
     const wait = Math.max(0, this.lastSent + CURSOR_INTERVAL_MS - Date.now())
@@ -119,7 +131,7 @@ export class Presence {
 
 export function parsePresence(state: unknown): PresenceState | null {
   if (typeof state !== 'object' || state === null) return null
-  const { user, cursor, selection, view } = state as Record<string, unknown>
+  const { user, cursor, selection, view, caret } = state as Record<string, unknown>
   if (typeof user !== 'object' || user === null) return null
   const { name, color } = user as Record<string, unknown>
   if (typeof name !== 'string' || typeof color !== 'number' || !Number.isInteger(color)) return null
@@ -143,5 +155,15 @@ export function parsePresence(state: unknown): PresenceState | null {
     cursor: cursor as Vec | null,
     selection: selection,
     view: validView ? (box ?? null) : null,
+    caret: parseCaret(caret),
   }
+}
+
+function parseCaret(caret: unknown): TextCaret | null {
+  if (typeof caret !== 'object' || caret === null) return null
+  const { id, anchor, head } = caret as Record<string, unknown>
+  const isPosition = (p: unknown) => typeof p === 'object' && p !== null
+  return typeof id === 'string' && isPosition(anchor) && isPosition(head)
+    ? { id, anchor, head }
+    : null
 }

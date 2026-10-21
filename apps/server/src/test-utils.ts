@@ -1,3 +1,4 @@
+import * as decoding from 'lib0/decoding'
 import { WebsocketProvider } from 'y-websocket'
 import * as Y from 'yjs'
 import { MemoryPersistence } from './persistence.ts'
@@ -44,3 +45,20 @@ export async function waitFor(check: () => boolean, timeoutMs = 3000): Promise<v
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export async function replay(server: RunningServer, room: string) {
+  const res = await fetch(`http://127.0.0.1:${server.port}/api/rooms/${room}/replay`)
+  const decoder = decoding.createDecoder(new Uint8Array(await res.arrayBuffer()))
+  const doc = new Y.Doc()
+  cleanups.push(() => doc.destroy())
+  const base = decoding.readVarUint8Array(decoder)
+  if (base.length > 0) Y.applyUpdate(doc, base)
+  const times: number[] = []
+  const sizes: number[] = []
+  while (decoding.hasContent(decoder)) {
+    times.push(decoding.readVarUint(decoder))
+    Y.applyUpdate(doc, decoding.readVarUint8Array(decoder))
+    sizes.push(doc.getMap('test').size)
+  }
+  return { doc, times, sizes, map: doc.getMap<number>('test') }
+}
